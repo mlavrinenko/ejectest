@@ -30,6 +30,10 @@ pub(crate) fn find_test_module_region(source: &str) -> Result<TestModuleRegion, 
     let cfg_test = "#[cfg(test)]";
     let code_positions = find_cfg_test_in_code(source, cfg_test);
 
+    log::debug!(
+        "found {} #[cfg(test)] candidate(s) in code",
+        code_positions.len()
+    );
     for cfg_pos in code_positions {
         let after_cfg = cfg_pos + cfg_test.len();
         let rest = source.get(after_cfg..).ok_or(EjectError::RegionNotFound)?;

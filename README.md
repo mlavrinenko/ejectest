@@ -8,7 +8,7 @@
 [![crates.io](https://img.shields.io/crates/v/ejectest.svg)](https://crates.io/crates/ejectest)
 [![License: MIT](https://img.shields.io/crates/l/ejectest.svg)](LICENSE-MIT)
 
-Extract tests to separate _test.rs file.
+Extract inline `#[cfg(test)] mod tests { ... }` into separate `_tests.rs` files.
 
 ## Install
 
@@ -26,7 +26,9 @@ Download a pre-built binary from the
 ## Usage
 
 ```bash
-ejectest
+ejectest src/lib.rs              # extract tests into src/lib_tests.rs
+ejectest --dry-run src/lib.rs    # preview without writing files
+ejectest --help                  # show all options
 ```
 
 ## Development

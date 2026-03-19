@@ -52,7 +52,15 @@ pub struct EjectResult {
 /// Returns [`EjectError::ValidationFailed`] if the modified source fails to parse
 /// (requires the `validate` feature, enabled by default).
 pub fn eject_tests(source: &str, file_stem: &str) -> Result<EjectResult, EjectError> {
+    log::debug!("scanning {file_stem} ({} bytes)", source.len());
     let region = scanner::find_test_module_region(source)?;
+    log::debug!(
+        "found test module at bytes {}..{} (inner {}..{})",
+        region.outer_start,
+        region.outer_end,
+        region.inner_start,
+        region.inner_end,
+    );
 
     let inner = source
         .get(region.inner_start..region.inner_end)
