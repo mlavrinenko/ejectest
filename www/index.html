@@ -1,29 +1,266 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ejectest</title>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 4rem auto; padding: 0 1rem; line-height: 1.6; }
-    h1 { margin-bottom: 0.25rem; }
-    code { background: #f4f4f4; padding: 0.15em 0.4em; border-radius: 3px; }
-    pre code { display: block; padding: 1em; overflow-x: auto; }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ejectest — eject your Rust tests</title>
+<meta name="description" content="One command to extract inline Rust tests into separate files.">
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --dim: #7d8590;
+    --accent: #f0883e;
+    --green: #3fb950;
+    --red: #f85149;
+    --blue: #58a6ff;
+    --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--mono);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
+  }
+
+  .landing {
+    max-width: 960px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 2.5rem;
+  }
+
+  /* ── Hero ── */
+  .hero { text-align: center; }
+
+  .hero .logo {
+    width: 80px;
+    height: 80px;
+    margin-bottom: 1rem;
+  }
+
+  .hero h1 {
+    font-size: 2.2rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  .hero h1 span { color: var(--accent); }
+
+  .hero p {
+    color: var(--dim);
+    font-size: 0.95rem;
+    margin-top: 0.5rem;
+  }
+
+  /* ── Diff panel ── */
+  .diff {
+    display: flex;
+    gap: 0.75rem;
+    align-items: stretch;
+  }
+
+  .diff-arrow {
+    display: flex;
+    align-items: center;
+    font-size: 1.5rem;
+    color: var(--dim);
+    padding: 0 0.25rem;
+    flex-shrink: 0;
+  }
+
+  .panel-group {
+    display: flex;
+    gap: 0.5rem;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .before-side { flex: 1; }
+  .before-side .panel { width: 100%; }
+
+  .panel-header {
+    background: var(--border);
+    padding: 0.4rem 0.75rem;
+    font-size: 0.75rem;
+    color: var(--dim);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .dot-red { background: var(--red); }
+  .dot-green { background: var(--green); }
+
+  .panel pre {
+    padding: 0.75rem;
+    font-size: 0.78rem;
+    line-height: 1.55;
+    overflow-x: auto;
+    white-space: pre;
+  }
+
+  .line-del { color: var(--red); opacity: 0.7; }
+  .line-add { color: var(--green); }
+  .kw { color: var(--blue); }
+  .str { color: var(--green); }
+  .attr { color: var(--accent); }
+  .cmt { color: var(--dim); }
+
+  /* ── Install ── */
+  .install { text-align: center; }
+
+  .install-cmds {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.5rem;
+    text-align: left;
+  }
+
+  .install-cmds code {
+    font-size: 0.85rem;
+    line-height: 1.6;
+  }
+
+  .prompt { color: var(--green); }
+  .cmd { color: var(--text); }
+  .arg { color: var(--accent); }
+
+  /* ── Footer ── */
+  footer {
+    display: flex;
+    gap: 1.5rem;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  footer a {
+    color: var(--dim);
+    text-decoration: none;
+    font-size: 0.8rem;
+    transition: color 0.15s;
+  }
+
+  footer a:hover { color: var(--accent); }
+
+  /* ── Responsive ── */
+  @media (max-width: 700px) {
+    .diff { flex-direction: column; }
+    .diff-arrow {
+      justify-content: center;
+      transform: rotate(90deg);
+      padding: 0;
+    }
+    .panel-group { flex-direction: column; }
+    .hero h1 { font-size: 1.6rem; }
+    .panel pre { font-size: 0.7rem; }
+  }
+</style>
 </head>
 <body>
-  <h1>ejectest</h1>
-  <p>Extract tests to separate _test.rs file.</p>
+<div class="landing">
 
-  <h2>Install</h2>
-  <pre><code>cargo install ejectest</code></pre>
+  <!-- Hero -->
+  <div class="hero">
+    <img src="logo.svg" alt="ejectest logo" class="logo">
+    <h1><span>ejectest</span> — eject your Rust tests</h1>
+    <p>One command to extract inline tests into separate files.</p>
+  </div>
 
-  <p>Or download a binary from the
-    <a href="https://github.com/mlavrinenko/ejectest/releases/latest">latest release</a>.
-  </p>
+  <!-- Before / After -->
+  <div class="diff">
+    <div class="before-side">
+      <div class="panel">
+        <div class="panel-header"><span class="dot dot-red"></span> lib.rs</div>
+        <pre>
+<span class="kw">pub fn</span> add(a: <span class="kw">i32</span>, b: <span class="kw">i32</span>) -> <span class="kw">i32</span> {
+    a + b
+}
 
+<span class="line-del"><span class="attr">#[cfg(test)]</span>
+<span class="kw">mod</span> tests {
+    <span class="kw">use super</span>::*;
+
+    <span class="attr">#[test]</span>
+    <span class="kw">fn</span> test_add() {
+        assert_eq!(add(1, 2), 3);
+    }
+}</span></pre>
+      </div>
+    </div>
+
+    <div class="diff-arrow">→</div>
+
+    <div class="panel-group">
+      <div class="panel">
+        <div class="panel-header"><span class="dot dot-green"></span> lib.rs</div>
+        <pre>
+<span class="kw">pub fn</span> add(a: <span class="kw">i32</span>, b: <span class="kw">i32</span>) -> <span class="kw">i32</span> {
+    a + b
+}
+
+<span class="line-add"><span class="attr">#[cfg(test)]</span>
+<span class="attr">#[path = <span class="str">"lib_tests.rs"</span>]</span>
+<span class="kw">mod</span> tests;</span></pre>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header"><span class="dot dot-green"></span> lib_tests.rs</div>
+        <pre>
+<span class="line-add"><span class="kw">use super</span>::*;
+
+<span class="attr">#[test]</span>
+<span class="kw">fn</span> test_add() {
+    assert_eq!(add(1, 2), 3);
+}</span></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Install -->
+  <div class="install">
+    <div class="install-cmds">
+      <code><span class="prompt">$</span> <span class="cmd">cargo install</span> <span class="arg">ejectest</span></code>
+      <code><span class="prompt">$</span> <span class="cmd">ejectest</span> <span class="arg">src/lib.rs</span></code>
+    </div>
+  </div>
+
+  <!-- Footer -->
   <footer>
-    <p><a href="https://github.com/mlavrinenko/ejectest">GitHub</a></p>
+    <a href="https://github.com/mlavrinenko/ejectest">GitHub</a>
+    <a href="https://crates.io/crates/ejectest">crates.io</a>
+    <a href="https://github.com/mlavrinenko/ejectest/blob/main/LICENSE-MIT">MIT License</a>
   </footer>
+
+</div>
 </body>
 </html>

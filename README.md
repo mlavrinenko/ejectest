@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="www/logo.svg" alt="ejectest logo" width="80">
+</p>
+
 # ejectest
 
 [![CI](https://github.com/mlavrinenko/ejectest/actions/workflows/ci.yml/badge.svg)](https://github.com/mlavrinenko/ejectest/actions/workflows/ci.yml)

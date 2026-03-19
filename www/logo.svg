@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <!-- Triangle with gear-tooth edges (6 teeth, 2 per side + 1 top) -->
+  <path d="
+    M64 6
+    L70 16 L76 12
+    L82 24 L88 22
+    L94 36 L100 36
+    L102 52 L108 56
+    L104 66
+
+    L24 66
+
+    L20 56 L26 52
+    L28 36 L34 36
+    L40 22 L46 24
+    L52 12 L58 16
+    Z
+  " fill="#f0883e"/>
+
+  <!-- Checkmark -->
+  <polyline
+    points="44,44 56,56 84,26"
+    stroke="#0d1117"
+    stroke-width="7"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"
+  />
+
+  <!-- Eject base bar -->
+  <rect x="20" y="76" width="88" height="14" rx="7" fill="#f0883e"/>
+</svg>
