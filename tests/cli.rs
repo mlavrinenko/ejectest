@@ -107,6 +107,15 @@ fn already_external_fails() {
 }
 
 #[test]
+fn version_flag() {
+    cmd()
+        .arg("--version")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(env!("CARGO_PKG_VERSION")));
+}
+
+#[test]
 fn missing_file_fails() {
     cmd()
         .arg("/tmp/nonexistent_ejectest_file.rs")

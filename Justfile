@@ -58,10 +58,17 @@ file-sizes:
 check-file-size:
     linecop
 
-# E2E: clone a real crate, eject all test modules, verify it still compiles and tests pass
-e2e REPO="https://github.com/BurntSushi/jiff":
-    ./scripts/e2e.sh "{{ REPO }}"
+# Default crates for E2E testing
+E2E_CRATES := "https://github.com/BurntSushi/jiff https://github.com/dtolnay/anyhow https://github.com/rayon-rs/rayon https://github.com/BurntSushi/memchr https://github.com/BurntSushi/regex-automata"
 
+# E2E: clone real crates, eject all test modules, verify they still compile and tests pass
+e2e CRATES=E2E_CRATES:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo build -q --release
+    export EJECTEST_BIN="$(pwd)/target/release/ejectest"
+    echo "{{ CRATES }}" | tr ' ' '\n' | parallel --will-cite --halt now,fail=1 --tag ./scripts/e2e.sh {}
+ 
 # Tag a release and push (usage: just release 0.1.0)
 release VERSION:
     #!/usr/bin/env bash

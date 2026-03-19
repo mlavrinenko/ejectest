@@ -48,6 +48,7 @@
             clippy
             rustfmt
             just
+            parallel
             nixd
             rust-analyzer
           ]);

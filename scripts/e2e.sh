@@ -10,9 +10,13 @@ trap 'rm -rf "$WORK"' EXIT
 echo "==> Cloning $REPO into $WORK"
 git clone --depth 1 "$REPO" "$WORK/crate" 2>&1 | tail -1
 
-echo "==> Building ejectest"
-cargo build -q --release
-BIN="$(pwd)/target/release/ejectest"
+if [ -n "${EJECTEST_BIN:-}" ]; then
+    BIN="$EJECTEST_BIN"
+else
+    echo "==> Building ejectest"
+    cargo build -q --release
+    BIN="$(pwd)/target/release/ejectest"
+fi
 
 echo "==> Scanning for inline test modules"
 FOUND=0
