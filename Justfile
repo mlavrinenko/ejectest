@@ -53,6 +53,10 @@ file-sizes:
 check-file-size:
     linecop
 
+# E2E: clone a real crate, eject all test modules, verify it still compiles and tests pass
+e2e REPO="https://github.com/BurntSushi/jiff":
+    ./scripts/e2e.sh "{{ REPO }}"
+
 # Tag a release and push (usage: just release 0.1.0)
 release VERSION:
     #!/usr/bin/env bash

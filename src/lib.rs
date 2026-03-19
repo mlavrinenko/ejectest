@@ -41,12 +41,16 @@ pub struct EjectResult {
 /// `file_stem` is the base name without extension (e.g. `"foo"` for `foo.rs`),
 /// used to derive the test file name `foo_tests.rs`.
 ///
+/// Only the first `#[cfg(test)] mod tests` block is extracted. Files with
+/// multiple test modules should be processed one at a time after renaming.
+///
 /// # Errors
 ///
 /// Returns [`EjectError::NoTestModule`] if no inline test module is found.
 /// Returns [`EjectError::AlreadyExternal`] if tests already use a `#[path]` attribute.
 /// Returns [`EjectError::RegionNotFound`] if module boundaries cannot be determined.
-/// Returns [`EjectError::ValidationFailed`] if the modified source fails to parse.
+/// Returns [`EjectError::ValidationFailed`] if the modified source fails to parse
+/// (requires the `validate` feature, enabled by default).
 pub fn eject_tests(source: &str, file_stem: &str) -> Result<EjectResult, EjectError> {
     let region = scanner::find_test_module_region(source)?;
 
@@ -64,8 +68,9 @@ pub fn eject_tests(source: &str, file_stem: &str) -> Result<EjectResult, EjectEr
     let suffix = source
         .get(region.outer_end..)
         .ok_or(EjectError::RegionNotFound)?;
-    let modified_source = format!("{prefix}{replacement}{suffix}");
+    let modified_source = normalize_trailing_newlines(&format!("{prefix}{replacement}{suffix}"));
 
+    #[cfg(feature = "validate")]
     syn::parse_file(&modified_source).map_err(|err| EjectError::ValidationFailed {
         reason: err.to_string(),
     })?;
@@ -75,6 +80,14 @@ pub fn eject_tests(source: &str, file_stem: &str) -> Result<EjectResult, EjectEr
         test_content,
         test_file_name,
     })
+}
+
+/// Ensure source ends with exactly one trailing newline and no trailing blank lines.
+fn normalize_trailing_newlines(source: &str) -> String {
+    let trimmed = source.trim_end();
+    let mut result = trimmed.to_owned();
+    result.push('\n');
+    result
 }
 
 /// Remove the common leading whitespace from every line.
@@ -201,5 +214,28 @@ mod tests {
         assert!(result.modified_source.contains("pub struct Foo;"));
         assert!(result.modified_source.contains("impl Foo"));
         assert!(result.modified_source.contains("fn bar"));
+    }
+
+    #[test]
+    fn no_trailing_blank_lines() {
+        let source = concat!(
+            "pub fn add(aa: i32, bb: i32) -> i32 {\n",
+            "    aa + bb\n",
+            "}\n",
+            "\n",
+            "\n",
+            "#[cfg(test)]\n",
+            "mod tests {\n",
+            "    use super::*;\n",
+            "    #[test]\n",
+            "    fn test_add() {\n",
+            "        assert_eq!(add(1, 2), 3);\n",
+            "    }\n",
+            "}\n",
+        );
+
+        let result = eject_tests(source, "math").expect("should succeed");
+        assert!(result.modified_source.ends_with("mod tests;\n"));
+        assert!(!result.modified_source.ends_with("\n\n"));
     }
 }

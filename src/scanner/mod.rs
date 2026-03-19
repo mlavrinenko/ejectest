@@ -1,3 +1,7 @@
+mod scan_state;
+
+use scan_state::{BraceAction, ScanState};
+
 use crate::EjectError;
 
 /// Byte range of the `#[cfg(test)] mod tests { ... }` block in source text.
@@ -109,172 +113,43 @@ fn find_mod_tests_after_attrs(source: &str) -> Option<usize> {
                 _ => return None,
             }
         } else if trimmed.starts_with("#[") {
-            let close = trimmed.find(']')?;
-            pos += close + 1;
+            let attr_body = trimmed.get(2..)?;
+            let close = find_attr_close(attr_body)?;
+            pos += 2 + close + 1;
         } else {
             return None;
         }
     }
 }
 
-// ---------------------------------------------------------------------------
-// Brace-matching scanner with basic string/comment awareness
-// ---------------------------------------------------------------------------
+/// Find the closing `]` of an attribute body, respecting string literals.
+///
+/// `source` starts just after the `[` in `#[...]`. Returns the byte offset
+/// of the matching `]`.
+fn find_attr_close(source: &str) -> Option<usize> {
+    let mut in_string = false;
+    let mut escaped = false;
 
-#[derive(Clone, Copy)]
-enum ScanState {
-    Normal,
-    /// Seen `/`, waiting for `/` or `*` to enter a comment.
-    Slash,
-    LineComment,
-    BlockComment,
-    /// Seen `*` inside a block comment, waiting for `/` to close.
-    BlockCommentStar,
-    InString,
-    InStringEscape,
-    /// Seen `'` — could be a char literal or a lifetime.
-    Tick,
-    /// Inside a char literal, consumed first char, expecting closing `'`.
-    InChar,
-    /// Inside a char literal after `\`, consuming escaped char next.
-    InCharEscape,
-}
-
-struct StateAction {
-    next: ScanState,
-    brace: BraceAction,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum BraceAction {
-    None,
-    Open,
-    Close,
-}
-
-impl ScanState {
-    fn advance(self, ch: char) -> StateAction {
-        match self {
-            Self::Normal => Self::advance_normal(ch),
-            Self::Slash => Self::advance_slash(ch),
-            Self::LineComment => Self::advance_line_comment(ch),
-            Self::BlockComment => Self::advance_block_comment(ch),
-            Self::BlockCommentStar => Self::advance_block_comment_star(ch),
-            Self::InString => Self::advance_in_string(ch),
-            Self::InStringEscape => StateAction {
-                next: Self::InString,
-                brace: BraceAction::None,
-            },
-            Self::Tick => Self::advance_tick(ch),
-            Self::InChar => Self::advance_in_char(ch),
-            Self::InCharEscape => StateAction {
-                next: Self::InChar,
-                brace: BraceAction::None,
-            },
+    for (idx, ch) in source.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
         }
-    }
-
-    fn advance_normal(ch: char) -> StateAction {
-        let (next, brace) = match ch {
-            '{' => (Self::Normal, BraceAction::Open),
-            '}' => (Self::Normal, BraceAction::Close),
-            '/' => (Self::Slash, BraceAction::None),
-            '"' => (Self::InString, BraceAction::None),
-            '\'' => (Self::Tick, BraceAction::None),
-            _ => (Self::Normal, BraceAction::None),
-        };
-        StateAction { next, brace }
-    }
-
-    fn advance_slash(ch: char) -> StateAction {
-        let (next, brace) = match ch {
-            '/' => (Self::LineComment, BraceAction::None),
-            '*' => (Self::BlockComment, BraceAction::None),
-            '{' => (Self::Normal, BraceAction::Open),
-            '}' => (Self::Normal, BraceAction::Close),
-            '"' => (Self::InString, BraceAction::None),
-            '\'' => (Self::Tick, BraceAction::None),
-            _ => (Self::Normal, BraceAction::None),
-        };
-        StateAction { next, brace }
-    }
-
-    fn advance_line_comment(ch: char) -> StateAction {
-        let next = if ch == '\n' {
-            Self::Normal
+        if in_string {
+            match ch {
+                '\\' => escaped = true,
+                '"' => in_string = false,
+                _ => {}
+            }
         } else {
-            Self::LineComment
-        };
-        StateAction {
-            next,
-            brace: BraceAction::None,
+            match ch {
+                '"' => in_string = true,
+                ']' => return Some(idx),
+                _ => {}
+            }
         }
     }
-
-    fn advance_block_comment(ch: char) -> StateAction {
-        let next = if ch == '*' {
-            Self::BlockCommentStar
-        } else {
-            Self::BlockComment
-        };
-        StateAction {
-            next,
-            brace: BraceAction::None,
-        }
-    }
-
-    fn advance_block_comment_star(ch: char) -> StateAction {
-        let next = match ch {
-            '/' => Self::Normal,
-            '*' => Self::BlockCommentStar,
-            _ => Self::BlockComment,
-        };
-        StateAction {
-            next,
-            brace: BraceAction::None,
-        }
-    }
-
-    fn advance_in_string(ch: char) -> StateAction {
-        let next = match ch {
-            '\\' => Self::InStringEscape,
-            '"' => Self::Normal,
-            _ => Self::InString,
-        };
-        StateAction {
-            next,
-            brace: BraceAction::None,
-        }
-    }
-
-    /// After `'`: could be a char literal (`'x'`, `'\n'`) or a lifetime (`'a`).
-    fn advance_tick(ch: char) -> StateAction {
-        let next = match ch {
-            '\\' => Self::InCharEscape,
-            '\'' => Self::Normal,
-            _ => Self::InChar,
-        };
-        StateAction {
-            next,
-            brace: BraceAction::None,
-        }
-    }
-
-    /// Inside a char literal after the first character, expecting closing `'`.
-    /// If `'` → char literal closed. Otherwise it was a lifetime → back to Normal.
-    /// Either way, we return to Normal. But we must check for braces in the
-    /// lifetime-fallback case (the current char is real code).
-    fn advance_in_char(ch: char) -> StateAction {
-        let brace = match ch {
-            '{' => BraceAction::Open,
-            '}' => BraceAction::Close,
-            _ => BraceAction::None,
-        };
-        StateAction {
-            next: Self::Normal,
-            brace,
-        }
-    }
+    None
 }
 
 /// Find the byte offset of the `}` that matches the `{` at `open_pos`.
@@ -336,12 +211,12 @@ mod tests {
     fn braces_in_string() {
         let src = concat!(
             "#[cfg(test)]\nmod tests {\n",
-            "    fn t() { let s = \"}\"; }\n",
+            "    fn t() { let ss = \"}\"; }\n",
             "}\n"
         );
         let rg = find_test_module_region(src).expect("should handle string braces");
         let inner = src.get(rg.inner_start..rg.inner_end).expect("valid range");
-        assert!(inner.contains("let s"));
+        assert!(inner.contains("let ss"));
     }
 
     #[test]
@@ -413,5 +288,44 @@ mod tests {
         let rg = find_test_module_region(src).expect("should skip string literal");
         let inner = src.get(rg.inner_start..rg.inner_end).expect("valid range");
         assert!(inner.contains("real_test"));
+    }
+
+    #[test]
+    fn braces_in_raw_string() {
+        let src = concat!(
+            "#[cfg(test)]\nmod tests {\n",
+            "    fn t() { let ss = r#\"}\"#; }\n",
+            "}\n"
+        );
+        let rg = find_test_module_region(src).expect("should handle raw string braces");
+        let inner = src.get(rg.inner_start..rg.inner_end).expect("valid range");
+        assert!(inner.contains("let ss"));
+    }
+
+    #[test]
+    fn nested_block_comment_braces() {
+        let src = concat!(
+            "#[cfg(test)]\nmod tests {\n",
+            "    /* /* } */ } */\n",
+            "    fn t() {}\n",
+            "}\n"
+        );
+        let rg = find_test_module_region(src).expect("should handle nested block comment");
+        let inner = src.get(rg.inner_start..rg.inner_end).expect("valid range");
+        assert!(inner.contains("fn t()"));
+    }
+
+    #[test]
+    fn attr_with_bracket_in_string() {
+        let src = concat!(
+            "#[cfg(test)]\n",
+            "#[doc = \"contains ] bracket\"]\n",
+            "mod tests {\n",
+            "    fn t() {}\n",
+            "}\n"
+        );
+        let rg = find_test_module_region(src).expect("should handle ] in attr string");
+        let inner = src.get(rg.inner_start..rg.inner_end).expect("valid range");
+        assert!(inner.contains("fn t()"));
     }
 }
