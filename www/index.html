@@ -82,6 +82,7 @@
 
   .panel-group {
     display: flex;
+    flex-direction: column;
     gap: 0.5rem;
     flex: 1;
     min-width: 0;
@@ -96,8 +97,16 @@
     min-width: 0;
   }
 
-  .before-side { flex: 1; }
-  .before-side .panel { width: 100%; }
+  .before-side {
+    flex: 1;
+    display: flex;
+  }
+  .before-side .panel {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  .before-side .panel pre { flex: 1; }
 
   .panel-header {
     background: var(--border);
@@ -180,7 +189,6 @@
       transform: rotate(90deg);
       padding: 0;
     }
-    .panel-group { flex-direction: column; }
     .hero h1 { font-size: 1.6rem; }
     .panel pre { font-size: 0.7rem; }
   }
