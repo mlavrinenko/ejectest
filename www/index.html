@@ -141,6 +141,17 @@
   .attr { color: var(--accent); }
   .cmt { color: var(--dim); }
 
+  /* ── Why ── */
+  .why {
+    text-align: center;
+    color: var(--dim);
+    font-size: 0.85rem;
+    line-height: 1.6;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
   /* ── Install ── */
   .install { text-align: center; }
 
@@ -201,7 +212,20 @@
   <div class="hero">
     <img src="logo.svg" alt="ejectest logo" class="logo">
     <h1><span>ejectest</span> — eject your Rust tests</h1>
-    <p>One command to extract inline tests into separate files.</p>
+  </div>
+
+  <!-- Why -->
+  <div class="why">
+    <p>Inline tests are convenient — until your files grow too large.</p>
+    <p>Manually ejecting means editing one file and creating another. That's busywork.</p>
+  </div>
+
+  <!-- Install -->
+  <div class="install">
+    <div class="install-cmds">
+      <code><span class="prompt">$</span> <span class="cmd">cargo install</span> <span class="arg">ejectest</span></code>
+      <code><span class="prompt">$</span> <span class="cmd">ejectest</span> <span class="arg">src/lib.rs</span></code>
+    </div>
   </div>
 
   <!-- Before / After -->
@@ -251,14 +275,6 @@
     assert_eq!(add(1, 2), 3);
 }</span></pre>
       </div>
-    </div>
-  </div>
-
-  <!-- Install -->
-  <div class="install">
-    <div class="install-cmds">
-      <code><span class="prompt">$</span> <span class="cmd">cargo install</span> <span class="arg">ejectest</span></code>
-      <code><span class="prompt">$</span> <span class="cmd">ejectest</span> <span class="arg">src/lib.rs</span></code>
     </div>
   </div>
 
