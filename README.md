@@ -17,6 +17,14 @@ Manually moving tests to a separate file means editing the source
 and creating a new test file with the right module path.
 That's busywork. **ejectest** does it in one command.
 
+## Usage
+
+```bash
+ejectest src/lib.rs              # extract tests into src/lib_tests.rs
+ejectest --dry-run src/lib.rs    # preview without writing files
+ejectest --help                  # show all options
+```
+
 ## Install
 
 ```bash
@@ -26,12 +34,35 @@ cargo install ejectest
 Or download a pre-built binary from the
 [latest release](https://github.com/mlavrinenko/ejectest/releases/latest).
 
-## Usage
+### Nix flake
+
+Add `ejectest` as a flake input and include it in your dev shell:
+
+```nix
+{
+  inputs = {
+    ejectest = {
+      url = "github:mlavrinenko/ejectest";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    # ... other inputs
+  };
+
+  outputs = { ejectest, nixpkgs, flake-utils, ... }:
+    flake-utils.lib.eachDefaultSystem (system: {
+      devShells.default = nixpkgs.legacyPackages.${system}.mkShell {
+        nativeBuildInputs = [
+          ejectest.packages.${system}.default
+        ];
+      };
+    });
+}
+```
+
+Or run it directly without installing:
 
 ```bash
-ejectest src/lib.rs              # extract tests into src/lib_tests.rs
-ejectest --dry-run src/lib.rs    # preview without writing files
-ejectest --help                  # show all options
+nix run github:mlavrinenko/ejectest -- src/lib.rs
 ```
 
 ## Library usage
