@@ -14,4 +14,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - State-machine scanner handling strings, comments, raw strings, lifetimes, and nested block comments
 - Optional `syn`-based validation of generated output (`validate` feature, enabled by default)
 - Multi-platform release binaries (Linux, macOS, Windows)
+- Library API (`ejectest::eject_tests`) usable with `default-features = false`
+- `--version` flag
 - E2E testing script for validation against real crates
