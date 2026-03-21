@@ -51,6 +51,25 @@ pub struct EjectResult {
 /// Returns [`EjectError::RegionNotFound`] if module boundaries cannot be determined.
 /// Returns [`EjectError::ValidationFailed`] if the modified source fails to parse
 /// (requires the `validate` feature, enabled by default).
+///
+/// # Examples
+///
+/// ```
+/// let source = "pub fn add(aa: i32, bb: i32) -> i32 { aa + bb }\n\
+///               \n\
+///               #[cfg(test)]\n\
+///               mod tests {\n\
+///                   use super::*;\n\
+///                   #[test]\n\
+///                   fn it_works() { assert_eq!(add(1, 2), 3); }\n\
+///               }\n";
+///
+/// let result = ejectest::eject_tests(source, "lib").unwrap();
+///
+/// assert_eq!(result.test_file_name, "lib_tests.rs");
+/// assert!(result.modified_source.contains("#[path = \"lib_tests.rs\"]"));
+/// assert!(result.test_content.contains("fn it_works"));
+/// ```
 pub fn eject_tests(source: &str, file_stem: &str) -> Result<EjectResult, EjectError> {
     log::debug!("scanning {file_stem} ({} bytes)", source.len());
     let region = scanner::find_test_module_region(source)?;

@@ -9,12 +9,14 @@ rust-version = "1.85"
 description = "Extract inline #[cfg(test)] mod tests into separate _tests.rs files."
 license = "MIT"
 repository = "https://github.com/mlavrinenko/ejectest"
+documentation = "https://docs.rs/ejectest"
 keywords = ["testing", "refactoring", "test-extraction", "code-organization"]
-categories = ["command-line-utilities"]
+categories = ["command-line-utilities", "development-tools"]
 include = ["/src/", "/LICENSE*", "/README.md"]
 
 [features]
-default = ["validate"]
+default = ["cli", "validate"]
+cli = ["clap", "anyhow", "env_logger"]
 validate = ["syn"]
 
 [lib]
@@ -24,13 +26,14 @@ path = "src/lib.rs"
 [[bin]]
 name = "ejectest"
 path = "src/main.rs"
+required-features = ["cli"]
 
 [dependencies]
 thiserror = "2"
-anyhow = "1"
-clap = { version = "4", features = ["derive"] }
+anyhow = { version = "1", optional = true }
+clap = { version = "4", features = ["derive"], optional = true }
 log = "0.4"
-env_logger = "0.11"
+env_logger = { version = "0.11", optional = true }
 syn = { version = "2", features = ["full", "parsing"], optional = true }
 
 [dev-dependencies]

@@ -34,6 +34,21 @@ ejectest --dry-run src/lib.rs    # preview without writing files
 ejectest --help                  # show all options
 ```
 
+## Library usage
+
+Add to your `Cargo.toml` with default features disabled:
+
+```toml
+ejectest = { version = "0.1", default-features = false }
+```
+
+```rust
+let result = ejectest::eject_tests(&source, "lib")?;
+// result.modified_source  — source with tests replaced by a #[path] stub
+// result.test_content     — extracted test file contents
+// result.test_file_name   — e.g. "lib_tests.rs"
+```
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and coding conventions.
