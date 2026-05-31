@@ -15,6 +15,10 @@ pub(crate) struct TestModuleRegion {
     pub(crate) inner_start: usize,
     /// Byte offset of the closing `}`.
     pub(crate) inner_end: usize,
+    /// Byte offset just past `#[cfg(test)]`, where extra outer attributes begin.
+    pub(crate) attrs_start: usize,
+    /// Byte offset where the `mod` keyword starts (end of extra outer attributes).
+    pub(crate) attrs_end: usize,
 }
 
 /// Locate the `#[cfg(test)] mod tests { ... }` block in source text.
@@ -59,6 +63,8 @@ pub(crate) fn find_test_module_region(source: &str) -> Result<TestModuleRegion, 
                     outer_end,
                     inner_start: open_brace + 1,
                     inner_end: close_brace,
+                    attrs_start: after_cfg,
+                    attrs_end: mod_pos,
                 });
             } else if trimmed.starts_with(';') {
                 return Err(EjectError::AlreadyExternal);
@@ -130,7 +136,7 @@ fn find_mod_tests_after_attrs(source: &str) -> Option<usize> {
 ///
 /// `source` starts just after the `[` in `#[...]`. Returns the byte offset
 /// of the matching `]`.
-fn find_attr_close(source: &str) -> Option<usize> {
+pub(crate) fn find_attr_close(source: &str) -> Option<usize> {
     let mut in_string = false;
     let mut escaped = false;
 

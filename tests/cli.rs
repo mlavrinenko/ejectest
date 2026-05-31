@@ -150,6 +150,42 @@ fn raw_string_in_test_module() {
 }
 
 #[test]
+fn allow_attrs_on_mod_become_inner_attrs() {
+    let dir = TempDir::new().expect("tempdir");
+    let source = concat!(
+        "pub fn first(arr: &[i32]) -> i32 {\n",
+        "    arr[0]\n",
+        "}\n",
+        "\n",
+        "#[cfg(test)]\n",
+        "#[allow(clippy::unwrap_used, clippy::indexing_slicing)]\n",
+        "mod tests {\n",
+        "    use super::*;\n",
+        "    #[test]\n",
+        "    fn test_first() {\n",
+        "        assert_eq!(first(&[1, 2, 3]), 1);\n",
+        "    }\n",
+        "}\n",
+    );
+    let src_path = write_sample(&dir, "lift.rs", source);
+
+    cmd().arg(&src_path).assert().success();
+
+    let test_path = dir.path().join("lift_tests.rs");
+    let test_content = fs::read_to_string(test_path).expect("read test file");
+    assert!(
+        test_content
+            .starts_with("#![allow(clippy::unwrap_used, clippy::indexing_slicing)]\nuse super::*;")
+    );
+
+    // Stub keeps #[cfg(test)] but not the allow.
+    let modified = fs::read_to_string(&src_path).expect("read modified");
+    assert!(modified.contains("#[cfg(test)]"));
+    assert!(modified.contains("#[path = \"lift_tests.rs\"]"));
+    assert!(!modified.contains("#[allow"));
+}
+
+#[test]
 fn no_trailing_blank_lines_after_extraction() {
     let dir = TempDir::new().expect("tempdir");
     let source = concat!(

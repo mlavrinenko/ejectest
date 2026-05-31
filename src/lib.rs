@@ -85,7 +85,18 @@ pub fn eject_tests(source: &str, file_stem: &str) -> Result<EjectResult, EjectEr
         .get(region.inner_start..region.inner_end)
         .ok_or(EjectError::RegionNotFound)?;
 
-    let test_content = dedent(inner);
+    let attrs_region = source
+        .get(region.attrs_start..region.attrs_end)
+        .ok_or(EjectError::RegionNotFound)?;
+    let inner_attrs = collect_inner_attrs(attrs_region);
+
+    let body = dedent(inner);
+    let test_content = if inner_attrs.is_empty() {
+        body
+    } else {
+        // Drop the leading blank line so the inner attribute heads the file.
+        format!("{inner_attrs}{}", body.trim_start_matches('\n'))
+    };
     let test_file_name = format!("{file_stem}_tests.rs");
     let replacement = format!("#[cfg(test)]\n#[path = \"{test_file_name}\"]\nmod tests;\n");
 
@@ -107,6 +118,29 @@ pub fn eject_tests(source: &str, file_stem: &str) -> Result<EjectResult, EjectEr
         test_content,
         test_file_name,
     })
+}
+
+/// Translate outer attributes sitting between `#[cfg(test)]` and `mod tests`
+/// into inner attributes (`#![..]`) for the head of the extracted file.
+///
+/// `#[cfg(test)]` is excluded by the caller's slice; it stays on the stub.
+/// Each `#[..]` becomes a `#![..]` line; whitespace between attributes is dropped.
+fn collect_inner_attrs(text: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text.trim_start();
+
+    while let Some(after_open) = rest.strip_prefix("#[") {
+        let Some(close) = scanner::find_attr_close(after_open) else {
+            break;
+        };
+        let attr_body = after_open.get(..close).unwrap_or("");
+        out.push_str("#![");
+        out.push_str(attr_body);
+        out.push_str("]\n");
+        rest = after_open.get(close + 1..).unwrap_or("").trim_start();
+    }
+
+    out
 }
 
 /// Ensure source ends with exactly one trailing newline and no trailing blank lines.
@@ -241,6 +275,95 @@ mod tests {
         assert!(result.modified_source.contains("pub struct Foo;"));
         assert!(result.modified_source.contains("impl Foo"));
         assert!(result.modified_source.contains("fn bar"));
+    }
+
+    #[test]
+    fn preserves_allow_attrs_as_inner() {
+        let source = concat!(
+            "pub fn first(arr: &[i32]) -> i32 {\n",
+            "    arr[0]\n",
+            "}\n",
+            "\n",
+            "#[cfg(test)]\n",
+            "#[allow(clippy::unwrap_used, clippy::indexing_slicing)]\n",
+            "mod tests {\n",
+            "    use super::*;\n",
+            "    #[test]\n",
+            "    fn test_first() {\n",
+            "        assert_eq!(first(&[1, 2, 3]), 1);\n",
+            "    }\n",
+            "}\n",
+        );
+
+        let result = eject_tests(source, "lift").expect("should succeed");
+
+        // Inner allow heads the extracted file, no leading blank line.
+        assert!(
+            result
+                .test_content
+                .starts_with("#![allow(clippy::unwrap_used, clippy::indexing_slicing)]\n")
+        );
+        // `use super::*;` follows immediately after the inner attribute.
+        assert!(
+            result.test_content.contains(
+                "#![allow(clippy::unwrap_used, clippy::indexing_slicing)]\nuse super::*;"
+            )
+        );
+        // Stub keeps #[cfg(test)] but not the allow, and does not duplicate it.
+        assert!(result.modified_source.contains("#[cfg(test)]"));
+        assert!(!result.modified_source.contains("#[allow"));
+        assert!(!result.test_content.contains("#[cfg(test)]"));
+    }
+
+    #[test]
+    fn preserves_multiple_outer_attrs() {
+        let source = concat!(
+            "#[cfg(test)]\n",
+            "#[allow(clippy::unwrap_used)]\n",
+            "#[allow(clippy::indexing_slicing)]\n",
+            "mod tests {\n",
+            "    use super::*;\n",
+            "    #[test]\n",
+            "    fn test_foo() {}\n",
+            "}\n",
+        );
+
+        let result = eject_tests(source, "foo").expect("should succeed");
+
+        assert!(
+            result.test_content.starts_with(
+                "#![allow(clippy::unwrap_used)]\n#![allow(clippy::indexing_slicing)]\n"
+            )
+        );
+    }
+
+    #[test]
+    fn no_extra_attrs_keeps_plain_body() {
+        let source = concat!(
+            "#[cfg(test)]\n",
+            "mod tests {\n",
+            "    use super::*;\n",
+            "    #[test]\n",
+            "    fn test_foo() {}\n",
+            "}\n",
+        );
+
+        let result = eject_tests(source, "foo").expect("should succeed");
+        assert!(!result.test_content.contains("#!["));
+    }
+
+    #[test]
+    fn collect_inner_attrs_translates_outer_to_inner() {
+        let text = "\n#[allow(clippy::unwrap_used)]\n";
+        assert_eq!(
+            collect_inner_attrs(text),
+            "#![allow(clippy::unwrap_used)]\n"
+        );
+    }
+
+    #[test]
+    fn collect_inner_attrs_empty_when_blank() {
+        assert_eq!(collect_inner_attrs("\n  \n"), "");
     }
 
     #[test]
