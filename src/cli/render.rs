@@ -36,16 +36,41 @@ fn render_check_text(report: &Report) -> String {
 fn render_apply_text(report: &Report, dry_run: bool) -> String {
     let mut out = String::new();
     for res in &report.results {
-        let test_path = test_path_for(res);
-        if dry_run {
-            out.push_str(&format!("Would create: {test_path}\n"));
-            out.push_str(&format!("Would modify: {}\n", res.path.display()));
-        } else {
-            out.push_str(&format!("Created: {test_path}\n"));
-            out.push_str(&format!("Modified: {}\n", res.path.display()));
+        if res.classification == Classification::Inline {
+            out.push_str(&eject_lines(res, dry_run));
         }
     }
+    // A directory run carries skipped files alongside ejected ones; summarise
+    // them. A lone inline file keeps the terse single-file output.
+    if report.results.len() > 1 {
+        out.push_str(&apply_summary_line(report, dry_run));
+    }
     out
+}
+
+fn eject_lines(res: &FileResult, dry_run: bool) -> String {
+    let test_path = test_path_for(res);
+    let source = res.path.display();
+    if dry_run {
+        format!("Would create: {test_path}\nWould modify: {source}\n")
+    } else {
+        format!("Created: {test_path}\nModified: {source}\n")
+    }
+}
+
+fn apply_summary_line(report: &Report, dry_run: bool) -> String {
+    let total = report.results.len();
+    let external = count(report, Classification::External);
+    let no_tests = count(report, Classification::NoTests);
+    let acted = report
+        .results
+        .iter()
+        .filter(|res| res.classification == Classification::Inline)
+        .count();
+    let verb = if dry_run { "would eject" } else { "ejected" };
+    format!(
+        "\nSummary: {acted} {verb}, {external} external, {no_tests} no tests ({total} scanned)\n"
+    )
 }
 
 fn render_check_json(report: &Report) -> String {
@@ -236,6 +261,29 @@ mod tests {
         let out = render_apply(&rep, OutputFormat::Json, true);
         assert!(out.contains("\"action\":\"would_eject\""));
         assert!(out.contains("\"would_eject\":1"));
+    }
+
+    #[test]
+    fn apply_text_directory_lists_ejected_and_summary() {
+        let rep = report(vec![
+            inline("src/foo.rs", true),
+            plain("src/bar.rs", Classification::External),
+            plain("src/baz.rs", Classification::NoTests),
+        ]);
+        let out = render_apply(&rep, OutputFormat::Text, false);
+        assert!(out.contains("Created: src/foo_tests.rs"));
+        assert!(out.contains("Modified: src/foo.rs"));
+        // Skipped files are not listed individually, only summarised.
+        assert!(!out.contains("bar.rs"));
+        assert!(out.contains("Summary: 1 ejected, 1 external, 1 no tests (3 scanned)"));
+    }
+
+    #[test]
+    fn apply_text_single_inline_has_no_summary() {
+        let rep = report(vec![inline("src/foo.rs", true)]);
+        let out = render_apply(&rep, OutputFormat::Text, false);
+        assert!(out.contains("Created: src/foo_tests.rs"));
+        assert!(!out.contains("Summary:"));
     }
 
     #[test]

@@ -15,9 +15,9 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Extract the inline test module from a file (writes by default).
+    /// Extract inline test modules from a file or directory (writes by default).
     Apply {
-        /// Rust source file to process.
+        /// Rust source file or directory to process.
         path: PathBuf,
         /// Show what would be done without writing files.
         #[arg(long)]

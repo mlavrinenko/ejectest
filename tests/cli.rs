@@ -328,6 +328,133 @@ fn check_json_emits_schema() {
         ));
 }
 
+// --- bulk / directory apply ---
+
+#[test]
+fn apply_directory_ejects_inline_skips_rest() {
+    let dir = TempDir::new().expect("tempdir");
+    let sub = dir.path().join("nested");
+    fs::create_dir(&sub).expect("mkdir");
+
+    let inline_path = write_sample(&dir, "inline.rs", sample_source());
+    let external_path = write_sample(&dir, "ejected.rs", external_source());
+    let plain_path = write_sample(&dir, "plain.rs", no_tests_source());
+    let deep_path = sub.join("deep.rs");
+    fs::write(&deep_path, sample_source()).expect("write nested");
+
+    cmd()
+        .arg("apply")
+        .arg(dir.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Created"))
+        .stdout(predicate::str::contains(
+            "Summary: 2 ejected, 1 external, 1 no tests (4 scanned)",
+        ));
+
+    // Inline files ejected.
+    for (src, test) in [
+        (&inline_path, "inline_tests.rs"),
+        (&deep_path, "deep_tests.rs"),
+    ] {
+        let modified = fs::read_to_string(src).expect("read modified");
+        assert!(modified.contains("#[path ="));
+        assert!(!modified.contains("fn test_add"));
+        assert!(src.parent().expect("parent").join(test).exists());
+    }
+
+    // External and no-test files left byte-identical.
+    assert_eq!(
+        fs::read_to_string(&external_path).expect("read"),
+        external_source()
+    );
+    assert_eq!(
+        fs::read_to_string(&plain_path).expect("read"),
+        no_tests_source()
+    );
+}
+
+#[test]
+fn apply_directory_is_idempotent() {
+    let dir = TempDir::new().expect("tempdir");
+    let src_path = write_sample(&dir, "math.rs", sample_source());
+
+    cmd().arg("apply").arg(dir.path()).assert().success();
+
+    let first = fs::read_to_string(&src_path).expect("read after first");
+    let test_first = fs::read_to_string(dir.path().join("math_tests.rs")).expect("read test");
+
+    // Second run changes nothing and exits zero.
+    cmd().arg("apply").arg(dir.path()).assert().success();
+
+    assert_eq!(
+        fs::read_to_string(&src_path).expect("read after second"),
+        first
+    );
+    assert_eq!(
+        fs::read_to_string(dir.path().join("math_tests.rs")).expect("read test"),
+        test_first
+    );
+}
+
+#[test]
+fn apply_directory_dry_run_writes_nothing() {
+    let dir = TempDir::new().expect("tempdir");
+    let src_path = write_sample(&dir, "math.rs", sample_source());
+    write_sample(&dir, "ext.rs", external_source());
+
+    cmd()
+        .arg("apply")
+        .arg("--dry-run")
+        .arg(dir.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Would create"))
+        .stdout(predicate::str::contains("would eject"));
+
+    assert_eq!(
+        fs::read_to_string(&src_path).expect("read"),
+        sample_source()
+    );
+    assert!(!dir.path().join("math_tests.rs").exists());
+}
+
+#[test]
+fn apply_directory_json_matches_schema() {
+    let dir = TempDir::new().expect("tempdir");
+    write_sample(&dir, "inline.rs", sample_source());
+    write_sample(&dir, "ext.rs", external_source());
+    write_sample(&dir, "plain.rs", no_tests_source());
+
+    cmd()
+        .arg("apply")
+        .arg("--format")
+        .arg("json")
+        .arg(dir.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"action\":\"ejected\""))
+        .stdout(predicate::str::contains("\"action\":\"skipped_external\""))
+        .stdout(predicate::str::contains("\"action\":\"skipped_no_tests\""))
+        .stdout(predicate::str::contains(
+            "\"summary\":{\"total\":3,\"ejected\":1,\"would_eject\":0,\"external\":1,\"no_tests\":1}",
+        ));
+}
+
+#[test]
+fn apply_directory_respects_gitignore() {
+    let dir = TempDir::new().expect("tempdir");
+    fs::write(dir.path().join(".gitignore"), "ignored.rs\n").expect("write gitignore");
+    let ignored = write_sample(&dir, "ignored.rs", sample_source());
+    write_sample(&dir, "tracked.rs", external_source());
+
+    cmd().arg("apply").arg(dir.path()).assert().success();
+
+    // Gitignored inline file is left untouched.
+    assert_eq!(fs::read_to_string(&ignored).expect("read"), sample_source());
+    assert!(!dir.path().join("ignored_tests.rs").exists());
+}
+
 #[test]
 fn check_respects_gitignore() {
     let dir = TempDir::new().expect("tempdir");

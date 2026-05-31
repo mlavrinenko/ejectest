@@ -18,22 +18,12 @@ else
     BIN="$(pwd)/target/release/ejectest"
 fi
 
-echo "==> Scanning for inline test modules"
-FOUND=0
-EJECTED=0
-while IFS= read -r file; do
-    FOUND=$((FOUND + 1))
-    if "$BIN" --dry-run "$file" >/dev/null 2>&1; then
-        if "$BIN" "$file" 2>/dev/null; then
-            EJECTED=$((EJECTED + 1))
-        else
-            echo "  WARN: failed to eject $file"
-        fi
-    fi
-done < <(grep -rl '#\[cfg(test)\]' "$WORK/crate" --include='*.rs' || true)
-echo "  Found $FOUND files with #[cfg(test)], ejected $EJECTED"
+echo "==> Ejecting all inline test modules under the crate"
+REPORT="$("$BIN" apply --format json "$WORK/crate")"
+EJECTED="$(printf '%s' "$REPORT" | grep -o '"ejected":[0-9]*' | grep -o '[0-9]*')"
+echo "  Ejected $EJECTED files"
 
-if [ "$EJECTED" -eq 0 ]; then
+if [ "${EJECTED:-0}" -eq 0 ]; then
     echo "ERROR: no files were ejected — something is wrong"
     exit 1
 fi
