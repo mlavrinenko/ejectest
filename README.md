@@ -20,9 +20,23 @@ That's busywork. **ejectest** does it in one command.
 ## Usage
 
 ```bash
-ejectest src/lib.rs              # extract tests into src/lib_tests.rs
-ejectest --dry-run src/lib.rs    # preview without writing files
-ejectest --help                  # show all options
+ejectest apply src/lib.rs           # extract tests into src/lib_tests.rs
+ejectest apply --dry-run src/lib.rs # preview without writing files
+ejectest check src/                 # CI gate: fail if any inline test module remains
+ejectest --help                     # show all options
+```
+
+`check` scans a file or directory (recursively, honouring `.gitignore`)
+and exits non-zero when any file still carries an inline
+`#[cfg(test)] mod tests { ... }` block — the `cargo fmt --check` idiom
+for the sibling-test-file convention.
+
+Both subcommands accept `--format <text|json>`. JSON output has the
+same structure for a single file and for a directory tree:
+
+```bash
+ejectest check --format json src/
+# {"files":[{"path":"src/lib.rs","status":"inline"}],"summary":{"total":1,"inline":1,"external":0,"no_tests":0}}
 ```
 
 ## Install
@@ -78,6 +92,13 @@ let result = ejectest::eject_tests(&source, "lib")?;
 // result.modified_source  — source with tests replaced by a #[path] stub
 // result.test_content     — extracted test file contents
 // result.test_file_name   — e.g. "lib_tests.rs"
+
+// Read-only detection (powers `ejectest check`):
+match ejectest::classify_source(&source) {
+    ejectest::Classification::Inline => { /* would be ejected */ }
+    ejectest::Classification::External => { /* already a #[path] module */ }
+    ejectest::Classification::NoTests => {}
+}
 ```
 
 ## Contributing

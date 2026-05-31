@@ -16,7 +16,7 @@ include = ["/src/", "/LICENSE*", "/README.md"]
 
 [features]
 default = ["cli", "validate"]
-cli = ["clap", "anyhow", "env_logger"]
+cli = ["clap", "anyhow", "env_logger", "ignore"]
 validate = ["syn"]
 
 [lib]
@@ -34,6 +34,7 @@ anyhow = { version = "1", optional = true }
 clap = { version = "4", features = ["derive"], optional = true }
 log = "0.4"
 env_logger = { version = "0.11", optional = true }
+ignore = { version = "0.4", optional = true }
 syn = { version = "2", features = ["full", "parsing"], optional = true }
 
 [dev-dependencies]

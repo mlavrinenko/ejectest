@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `check` subcommand: scan a file or directory (recursively, honouring `.gitignore`) for inline `#[cfg(test)] mod tests { ... }` blocks without modifying anything; exits non-zero when any are found (CI / pre-commit gate)
+- `--format <text|json>` on both subcommands; JSON output shares one structure for single-file and directory inputs
+- Library API `classify_source` / `Classification` for read-only detection (usable with `default-features = false`)
+
+### Changed
+
+- BREAKING: CLI now uses subcommands. `ejectest <file>` becomes `ejectest apply <file>`; `--dry-run` moves under `apply`
+
 ### Fixed
 
 - Preserve outer attributes (e.g. `#[allow(...)]`) on the `mod tests` declaration by translating them to inner attributes (`#![...]`) at the top of the extracted `_tests.rs`; `#[cfg(test)]` stays on the stub

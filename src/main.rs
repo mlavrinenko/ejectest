@@ -1,54 +1,80 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+use std::process::ExitCode;
 
-use anyhow::{Context, Result};
-use clap::Parser;
+use anyhow::Result;
+use clap::{Parser, Subcommand, ValueEnum};
+use ejectest::OutputFormat;
 
-/// Extract inline `#[cfg(test)] mod tests { ... }` into a separate `_tests.rs` file.
+/// Extract inline `#[cfg(test)] mod tests { ... }` into separate `_tests.rs` files.
 #[derive(Parser)]
 #[command(name = "ejectest", version, about)]
 struct Cli {
-    /// Rust source file to process.
-    file: PathBuf,
-
-    /// Show what would be done without writing files.
-    #[arg(long)]
-    dry_run: bool,
+    #[command(subcommand)]
+    command: Command,
 }
 
-fn main() -> Result<()> {
+#[derive(Subcommand)]
+enum Command {
+    /// Extract the inline test module from a file (writes by default).
+    Apply {
+        /// Rust source file to process.
+        path: PathBuf,
+        /// Show what would be done without writing files.
+        #[arg(long)]
+        dry_run: bool,
+        /// Output format.
+        #[arg(long, value_enum, default_value_t = Format::Text)]
+        format: Format,
+    },
+    /// Detect inline test modules without modifying (file or directory).
+    Check {
+        /// Rust source file or directory to scan.
+        path: PathBuf,
+        /// Output format.
+        #[arg(long, value_enum, default_value_t = Format::Text)]
+        format: Format,
+    },
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum Format {
+    Text,
+    Json,
+}
+
+impl From<Format> for OutputFormat {
+    fn from(format: Format) -> Self {
+        match format {
+            Format::Text => Self::Text,
+            Format::Json => Self::Json,
+        }
+    }
+}
+
+fn main() -> Result<ExitCode> {
     env_logger::init();
 
-    let cli = Cli::parse();
-
-    let source = std::fs::read_to_string(&cli.file)
-        .with_context(|| format!("failed to read {}", cli.file.display()))?;
-
-    let file_stem = cli
-        .file
-        .file_stem()
-        .and_then(|os| os.to_str())
-        .context("invalid file name")?;
-
-    let result = ejectest::eject_tests(&source, file_stem)?;
-
-    let parent = cli.file.parent().unwrap_or_else(|| Path::new("."));
-    let test_path = parent.join(&result.test_file_name);
-
-    if cli.dry_run {
-        log::info!("dry-run mode: no files written");
-        println!("Would create: {}", test_path.display());
-        println!("Would modify: {}\n", cli.file.display());
-        println!("--- {} ---", result.test_file_name);
-        print!("{}", result.test_content);
-        println!("--- end ---");
-    } else {
-        std::fs::write(&test_path, &result.test_content)
-            .with_context(|| format!("failed to write {}", test_path.display()))?;
-        std::fs::write(&cli.file, &result.modified_source)
-            .with_context(|| format!("failed to write {}", cli.file.display()))?;
-        println!("Created: {}", test_path.display());
-        println!("Modified: {}", cli.file.display());
+    match Cli::parse().command {
+        Command::Apply {
+            path,
+            dry_run,
+            format,
+        } => {
+            let report = ejectest::apply_path(&path, dry_run)?;
+            print!(
+                "{}",
+                ejectest::render_apply(&report, format.into(), dry_run)
+            );
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Check { path, format } => {
+            let report = ejectest::check_path(&path)?;
+            print!("{}", ejectest::render_check(&report, format.into()));
+            if report.has_inline() {
+                Ok(ExitCode::FAILURE)
+            } else {
+                Ok(ExitCode::SUCCESS)
+            }
+        }
     }
-
-    Ok(())
 }

@@ -1,7 +1,7 @@
 use std::fs;
 
 use assert_cmd::Command;
-use predicates::prelude::predicate;
+use predicates::prelude::{PredicateBooleanExt, predicate};
 use tempfile::TempDir;
 
 fn cmd() -> Command {
@@ -28,6 +28,14 @@ fn sample_source() -> &'static str {
     )
 }
 
+fn external_source() -> &'static str {
+    "#[cfg(test)]\n#[path = \"ext_tests.rs\"]\nmod tests;\n"
+}
+
+fn no_tests_source() -> &'static str {
+    "pub fn foo() -> i32 { 42 }\n"
+}
+
 fn write_sample(dir: &TempDir, name: &str, content: &str) -> std::path::PathBuf {
     let path = dir.path().join(name);
     fs::write(&path, content).expect("write sample file");
@@ -35,11 +43,12 @@ fn write_sample(dir: &TempDir, name: &str, content: &str) -> std::path::PathBuf 
 }
 
 #[test]
-fn dry_run_shows_plan_without_writing() {
+fn apply_dry_run_shows_plan_without_writing() {
     let dir = TempDir::new().expect("tempdir");
     let src_path = write_sample(&dir, "math.rs", sample_source());
 
     cmd()
+        .arg("apply")
         .arg("--dry-run")
         .arg(&src_path)
         .assert()
@@ -56,11 +65,12 @@ fn dry_run_shows_plan_without_writing() {
 }
 
 #[test]
-fn extraction_creates_test_file_and_modifies_source() {
+fn apply_creates_test_file_and_modifies_source() {
     let dir = TempDir::new().expect("tempdir");
     let src_path = write_sample(&dir, "math.rs", sample_source());
 
     cmd()
+        .arg("apply")
         .arg(&src_path)
         .assert()
         .success()
@@ -79,11 +89,12 @@ fn extraction_creates_test_file_and_modifies_source() {
 }
 
 #[test]
-fn no_test_module_fails() {
+fn apply_no_test_module_fails() {
     let dir = TempDir::new().expect("tempdir");
-    let src_path = write_sample(&dir, "empty.rs", "pub fn foo() -> i32 { 42 }\n");
+    let src_path = write_sample(&dir, "empty.rs", no_tests_source());
 
     cmd()
+        .arg("apply")
         .arg(&src_path)
         .assert()
         .failure()
@@ -91,7 +102,7 @@ fn no_test_module_fails() {
 }
 
 #[test]
-fn already_external_fails() {
+fn apply_already_external_fails() {
     let dir = TempDir::new().expect("tempdir");
     let src_path = write_sample(
         &dir,
@@ -100,10 +111,28 @@ fn already_external_fails() {
     );
 
     cmd()
+        .arg("apply")
         .arg(&src_path)
         .assert()
         .failure()
         .stderr(predicate::str::contains("already extracted"));
+}
+
+#[test]
+fn apply_json_reports_ejected_file() {
+    let dir = TempDir::new().expect("tempdir");
+    let src_path = write_sample(&dir, "math.rs", sample_source());
+
+    cmd()
+        .arg("apply")
+        .arg("--format")
+        .arg("json")
+        .arg(&src_path)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"action\":\"ejected\""))
+        .stdout(predicate::str::contains("\"test_file\":\"math_tests.rs\""))
+        .stdout(predicate::str::contains("\"ejected\":1"));
 }
 
 #[test]
@@ -116,8 +145,9 @@ fn version_flag() {
 }
 
 #[test]
-fn missing_file_fails() {
+fn apply_missing_file_fails() {
     cmd()
+        .arg("apply")
         .arg("/tmp/nonexistent_ejectest_file.rs")
         .assert()
         .failure()
@@ -125,7 +155,7 @@ fn missing_file_fails() {
 }
 
 #[test]
-fn raw_string_in_test_module() {
+fn apply_raw_string_in_test_module() {
     let dir = TempDir::new().expect("tempdir");
     let source = concat!(
         "pub fn foo() -> &'static str { \"hello\" }\n",
@@ -142,7 +172,7 @@ fn raw_string_in_test_module() {
     );
     let src_path = write_sample(&dir, "raw.rs", source);
 
-    cmd().arg(&src_path).assert().success();
+    cmd().arg("apply").arg(&src_path).assert().success();
 
     let test_path = dir.path().join("raw_tests.rs");
     let test_content = fs::read_to_string(test_path).expect("read test file");
@@ -150,7 +180,7 @@ fn raw_string_in_test_module() {
 }
 
 #[test]
-fn allow_attrs_on_mod_become_inner_attrs() {
+fn apply_allow_attrs_on_mod_become_inner_attrs() {
     let dir = TempDir::new().expect("tempdir");
     let source = concat!(
         "pub fn first(arr: &[i32]) -> i32 {\n",
@@ -169,7 +199,7 @@ fn allow_attrs_on_mod_become_inner_attrs() {
     );
     let src_path = write_sample(&dir, "lift.rs", source);
 
-    cmd().arg(&src_path).assert().success();
+    cmd().arg("apply").arg(&src_path).assert().success();
 
     let test_path = dir.path().join("lift_tests.rs");
     let test_content = fs::read_to_string(test_path).expect("read test file");
@@ -186,7 +216,7 @@ fn allow_attrs_on_mod_become_inner_attrs() {
 }
 
 #[test]
-fn no_trailing_blank_lines_after_extraction() {
+fn apply_no_trailing_blank_lines_after_extraction() {
     let dir = TempDir::new().expect("tempdir");
     let source = concat!(
         "pub fn foo() -> i32 { 42 }\n",
@@ -200,9 +230,117 @@ fn no_trailing_blank_lines_after_extraction() {
     );
     let src_path = write_sample(&dir, "trail.rs", source);
 
-    cmd().arg(&src_path).assert().success();
+    cmd().arg("apply").arg(&src_path).assert().success();
 
     let modified = fs::read_to_string(&src_path).expect("read modified");
     assert!(modified.ends_with("mod tests;\n"));
     assert!(!modified.ends_with("\n\n"));
+}
+
+// --- check mode ---
+
+#[test]
+fn check_clean_file_is_silent_and_succeeds() {
+    let dir = TempDir::new().expect("tempdir");
+    let src_path = write_sample(&dir, "clean.rs", external_source());
+
+    cmd()
+        .arg("check")
+        .arg(&src_path)
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty());
+}
+
+#[test]
+fn check_inline_file_fails_and_names_it() {
+    let dir = TempDir::new().expect("tempdir");
+    let src_path = write_sample(&dir, "inline.rs", sample_source());
+
+    cmd()
+        .arg("check")
+        .arg(&src_path)
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("inline.rs"));
+
+    // check must not modify anything.
+    let after = fs::read_to_string(&src_path).expect("read");
+    assert_eq!(after, sample_source());
+    assert!(!dir.path().join("inline_tests.rs").exists());
+}
+
+#[test]
+fn check_directory_recurses_and_reports_inline_only() {
+    let dir = TempDir::new().expect("tempdir");
+    let sub = dir.path().join("nested");
+    fs::create_dir(&sub).expect("mkdir");
+
+    write_sample(&dir, "inline.rs", sample_source());
+    write_sample(&dir, "ejected.rs", external_source());
+    write_sample(&dir, "plain.rs", no_tests_source());
+    fs::write(sub.join("deep_inline.rs"), sample_source()).expect("write nested");
+
+    cmd()
+        .arg("check")
+        .arg(dir.path())
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("inline.rs"))
+        .stdout(predicate::str::contains("deep_inline.rs"))
+        .stdout(predicate::str::contains("ejected.rs").not())
+        .stdout(predicate::str::contains("plain.rs").not());
+}
+
+#[test]
+fn check_already_ejected_tree_succeeds() {
+    let dir = TempDir::new().expect("tempdir");
+    write_sample(&dir, "a.rs", external_source());
+    write_sample(&dir, "b.rs", no_tests_source());
+
+    cmd()
+        .arg("check")
+        .arg(dir.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty());
+}
+
+#[test]
+fn check_json_emits_schema() {
+    let dir = TempDir::new().expect("tempdir");
+    write_sample(&dir, "inline.rs", sample_source());
+    write_sample(&dir, "ext.rs", external_source());
+    write_sample(&dir, "plain.rs", no_tests_source());
+
+    cmd()
+        .arg("check")
+        .arg("--format")
+        .arg("json")
+        .arg(dir.path())
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("\"status\":\"inline\""))
+        .stdout(predicate::str::contains("\"status\":\"external\""))
+        .stdout(predicate::str::contains("\"status\":\"no_tests\""))
+        .stdout(predicate::str::contains(
+            "\"summary\":{\"total\":3,\"inline\":1,\"external\":1,\"no_tests\":1}",
+        ));
+}
+
+#[test]
+fn check_respects_gitignore() {
+    let dir = TempDir::new().expect("tempdir");
+    fs::write(dir.path().join(".gitignore"), "ignored.rs\n").expect("write gitignore");
+    write_sample(&dir, "ignored.rs", sample_source());
+    write_sample(&dir, "tracked.rs", external_source());
+
+    // Only the gitignored file has an inline module; it must be skipped,
+    // so the check passes and is silent.
+    cmd()
+        .arg("check")
+        .arg(dir.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty());
 }
