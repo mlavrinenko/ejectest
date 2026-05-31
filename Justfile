@@ -74,5 +74,5 @@ release VERSION:
     #!/usr/bin/env bash
     set -euo pipefail
     just check
-    git tag -a "v{{ VERSION }}" -m "v{{ VERSION }}"
+    git tag -f -a "v{{ VERSION }}" -m "v{{ VERSION }}"
     git push github "v{{ VERSION }}"
