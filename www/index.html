@@ -218,13 +218,16 @@
   <div class="why">
     <p>Inline tests are convenient — until your files grow too large.</p>
     <p>Manually ejecting means editing one file and creating another. That's busywork.</p>
+    <p>Point it at a whole tree and migrate every file in one command.</p>
   </div>
 
   <!-- Install -->
   <div class="install">
     <div class="install-cmds">
       <code><span class="prompt">$</span> <span class="cmd">cargo install</span> <span class="arg">ejectest</span></code>
-      <code><span class="prompt">$</span> <span class="cmd">ejectest</span> <span class="arg">src/lib.rs</span></code>
+      <code><span class="prompt">$</span> <span class="cmd">ejectest apply</span> <span class="arg">src/lib.rs</span></code>
+      <code><span class="prompt">$</span> <span class="cmd">ejectest apply</span> <span class="arg">src/</span></code>
+      <code><span class="prompt">$</span> <span class="cmd">ejectest check</span> <span class="arg">src/</span></code>
     </div>
   </div>
 

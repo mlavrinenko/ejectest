@@ -7,10 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-31
+
 ### Added
 
+- `apply` now accepts a directory: walk the tree (honouring `.gitignore`) and eject every file carrying an inline `#[cfg(test)] mod tests { ... }` block in one invocation, skipping already-external and no-test files. Idempotent — re-running an ejected tree changes nothing
 - `check` subcommand: scan a file or directory (recursively, honouring `.gitignore`) for inline `#[cfg(test)] mod tests { ... }` blocks without modifying anything; exits non-zero when any are found (CI / pre-commit gate)
-- `--format <text|json>` on both subcommands; JSON output shares one structure for single-file and directory inputs
+- `--format <text|json>` on both subcommands; JSON output shares one structure for single-file and directory inputs. `apply --format json` reports an `action` per file (`ejected`, `would_eject`, `skipped_external`, `skipped_no_tests`)
 - Library API `classify_source` / `Classification` for read-only detection (usable with `default-features = false`)
 
 ### Changed

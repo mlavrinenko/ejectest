@@ -21,10 +21,17 @@ That's busywork. **ejectest** does it in one command.
 
 ```bash
 ejectest apply src/lib.rs           # extract tests into src/lib_tests.rs
-ejectest apply --dry-run src/lib.rs # preview without writing files
+ejectest apply src/                 # eject every inline module under a tree
+ejectest apply --dry-run src/       # preview without writing files
 ejectest check src/                 # CI gate: fail if any inline test module remains
 ejectest --help                     # show all options
 ```
+
+`apply` takes a file or a directory. Given a directory it walks the tree
+(recursively, honouring `.gitignore`), ejecting every file with an inline
+`#[cfg(test)] mod tests { ... }` block and skipping files already external
+or without a test module. Re-running on an ejected tree is a no-op, so the
+one-time migration and any later sweep are a single command.
 
 `check` scans a file or directory (recursively, honouring `.gitignore`)
 and exits non-zero when any file still carries an inline
@@ -76,7 +83,7 @@ Add `ejectest` as a flake input and include it in your dev shell:
 Or run it directly without installing:
 
 ```bash
-nix run github:mlavrinenko/ejectest -- src/lib.rs
+nix run github:mlavrinenko/ejectest -- apply src/lib.rs
 ```
 
 ## Library usage
@@ -84,7 +91,7 @@ nix run github:mlavrinenko/ejectest -- src/lib.rs
 Add to your `Cargo.toml` with default features disabled:
 
 ```toml
-ejectest = { version = "0.1", default-features = false }
+ejectest = { version = "0.2", default-features = false }
 ```
 
 ```rust
