@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-03
+
+### Added
+
+- `--files-from <PATH>` on `apply` and `check`: process only files listed in a newline-separated file; use `-` for stdin. Files outside the target root or missing produce errors
+- `--lenient` flag on `apply` and `check`: when used with `--files-from`, missing files and paths outside the target root are silently skipped instead of erroring
+- `FileFilter` / `read_file_list` in the library API for programmatic file-list filtering
+
 ## [0.2.0] - 2026-05-31
 
 ### Added

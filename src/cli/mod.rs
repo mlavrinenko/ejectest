@@ -1,6 +1,7 @@
 //! CLI orchestration: directory walking, `check` / `apply` commands, output
 //! rendering. Gated behind the `cli` feature.
 
+mod filelist;
 mod render;
 mod walk;
 
@@ -10,6 +11,7 @@ use anyhow::{Context, Result};
 
 use crate::{Classification, classify_source, eject_tests};
 
+pub use filelist::{FileFilter, read_file_list};
 pub use render::{render_apply, render_check};
 
 /// Output format for command results.
@@ -52,13 +54,18 @@ impl Report {
 /// Scan `path` (file or directory) and classify every Rust file without
 /// modifying anything.
 ///
+/// When `filter` is provided, only files present in the filter are scanned.
+///
 /// # Errors
 ///
 /// Returns an error if the path cannot be walked or a file cannot be read.
-pub fn check_path(path: &Path) -> Result<Report> {
+pub fn check_path(path: &Path, filter: Option<&FileFilter>) -> Result<Report> {
     let files = walk::collect_rust_files(path)?;
     let mut results = Vec::with_capacity(files.len());
     for file in files {
+        if filter.is_some_and(|ff| !ff.contains(&file)) {
+            continue;
+        }
         let source = std::fs::read_to_string(&file)
             .with_context(|| format!("failed to read {}", file.display()))?;
         results.push(FileResult {
@@ -81,24 +88,29 @@ pub fn check_path(path: &Path) -> Result<Report> {
 /// For a single file, the file must carry an inline module: external or
 /// no-test files are reported as errors rather than skipped.
 ///
+/// When `filter` is provided, only files present in the filter are processed.
+///
 /// # Errors
 ///
 /// Returns an error if the path cannot be walked, a file cannot be read or
 /// written, a file name is invalid, or — for a single-file input — no inline
 /// test module is present.
-pub fn apply_path(path: &Path, dry_run: bool) -> Result<Report> {
+pub fn apply_path(path: &Path, dry_run: bool, filter: Option<&FileFilter>) -> Result<Report> {
     if path.is_dir() {
-        apply_dir(path, dry_run)
+        apply_dir(path, dry_run, filter)
     } else {
         apply_file(path, dry_run)
     }
 }
 
 /// Eject every qualifying file under a directory, skipping the rest.
-fn apply_dir(path: &Path, dry_run: bool) -> Result<Report> {
+fn apply_dir(path: &Path, dry_run: bool, filter: Option<&FileFilter>) -> Result<Report> {
     let files = walk::collect_rust_files(path)?;
     let mut results = Vec::with_capacity(files.len());
     for file in files {
+        if filter.is_some_and(|ff| !ff.contains(&file)) {
+            continue;
+        }
         results.push(eject_one(&file, dry_run)?);
     }
     Ok(Report { results })

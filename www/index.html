@@ -228,6 +228,8 @@
       <code><span class="prompt">$</span> <span class="cmd">ejectest apply</span> <span class="arg">src/lib.rs</span></code>
       <code><span class="prompt">$</span> <span class="cmd">ejectest apply</span> <span class="arg">src/</span></code>
       <code><span class="prompt">$</span> <span class="cmd">ejectest check</span> <span class="arg">src/</span></code>
+      <code><span class="prompt">$</span> <span class="cmd">ejectest apply</span> <span class="arg">src/</span> <span class="arg">--files-from</span> <span class="arg">hot.txt</span></code>
+      <code><span class="prompt">$</span> <span class="cmd">linecop --baseline=90 --format=paths</span> <span class="arg">|</span> <span class="cmd">ejectest apply</span> <span class="arg">src/ --files-from -</span></code>
     </div>
   </div>
 

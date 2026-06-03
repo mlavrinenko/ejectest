@@ -8,7 +8,8 @@ pub use classify::{Classification, classify_source};
 
 #[cfg(feature = "cli")]
 pub use cli::{
-    FileResult, OutputFormat, Report, apply_path, check_path, render_apply, render_check,
+    FileFilter, FileResult, OutputFormat, Report, apply_path, check_path, read_file_list,
+    render_apply, render_check,
 };
 
 use thiserror::Error;
