@@ -34,6 +34,9 @@ enum Command {
         /// How a mod-rs file (`mod.rs`, `lib.rs`, `main.rs`) names its extracted tests.
         #[arg(long, value_enum, default_value_t = ModRsStyle::Sibling)]
         mod_rs_tests: ModRsStyle,
+        /// Replace a test file that already holds other content (otherwise the eject is refused).
+        #[arg(long)]
+        overwrite: bool,
     },
     /// Detect inline test modules without modifying (file or directory).
     Check {
@@ -48,6 +51,9 @@ enum Command {
         /// Allow missing files and paths outside root in the file list.
         #[arg(long)]
         lenient: bool,
+        /// How a mod-rs file would name its extracted tests, to report the target `apply` would find.
+        #[arg(long, value_enum, default_value_t = ModRsStyle::Sibling)]
+        mod_rs_tests: ModRsStyle,
     },
 }
 
@@ -80,6 +86,13 @@ fn build_filter(
     }
 }
 
+/// Print each message to stderr as `<level>: <message>`.
+fn warn_all(level: &str, messages: &[String]) {
+    for message in messages {
+        eprintln!("{level}: {message}");
+    }
+}
+
 fn main() -> Result<ExitCode> {
     env_logger::init();
 
@@ -91,25 +104,46 @@ fn main() -> Result<ExitCode> {
             files_from,
             lenient,
             mod_rs_tests,
+            overwrite,
         } => {
             let filter = build_filter(files_from.as_deref(), &path, lenient)?;
-            let report =
-                ejectest::apply_path(&path, dry_run, filter.as_ref(), mod_rs_tests.into())?;
+            let report = ejectest::apply_path(
+                &path,
+                dry_run,
+                filter.as_ref(),
+                mod_rs_tests.into(),
+                overwrite,
+            )?;
             print!(
                 "{}",
                 ejectest::render_apply(&report, format.into(), dry_run)
             );
-            Ok(ExitCode::SUCCESS)
+            warn_all("warning", &report.warnings());
+            let refusals = report.refusals();
+            warn_all("error", &refusals);
+            Ok(if refusals.is_empty() {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            })
         }
         Command::Check {
             path,
             format,
             files_from,
             lenient,
+            mod_rs_tests,
         } => {
             let filter = build_filter(files_from.as_deref(), &path, lenient)?;
-            let report = ejectest::check_path(&path, filter.as_ref())?;
+            let report = ejectest::check_path(&path, filter.as_ref(), mod_rs_tests.into())?;
             print!("{}", ejectest::render_check(&report, format.into()));
+            warn_all("warning", &report.warnings());
+            let would_refuse: Vec<String> = report
+                .refusals()
+                .into_iter()
+                .map(|msg| format!("apply would refuse: {msg}"))
+                .collect();
+            warn_all("warning", &would_refuse);
             if report.has_inline() {
                 Ok(ExitCode::FAILURE)
             } else {

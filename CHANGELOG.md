@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `apply --overwrite` replaces a test file that holds other content
+- `check --mod-rs-tests <sibling|tests>` to name the target it reports
+- `check` and `apply --dry-run` report what `apply` would do with the test file: `"target"` (`missing`, `identical`, `conflict`, `overwrite`) and `"test_file"` in JSON, warnings and refusals on stderr; a refused file has action `refused`
+- `Report::warnings`, `Report::refusals`, `FileResult::target` and `TargetState` in the library API
+
+### Changed
+
+- BREAKING: `apply` refuses, writing neither file, when the test file exists with content other than the extracted tests, for every target name (`<stem>_tests.rs`, `mod_tests.rs`, `tests.rs`), not only `tests.rs`; it used to overwrite silently. A directory run checks every target before writing anything. A test file that already holds exactly the tests is left as is with a warning, and the source is still edited
+- BREAKING: `apply_path` takes an `overwrite` argument and `check_path` a `ModRsTests` argument
+
 ## [0.4.0] - 2026-10-07
 
 ### Added

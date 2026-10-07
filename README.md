@@ -24,6 +24,7 @@ ejectest apply src/lib.rs             # extract tests into src/lib_tests.rs
 ejectest apply src/                   # eject every inline module under a tree
 ejectest apply --dry-run src/         # preview without writing files
 ejectest apply --mod-rs-tests tests src/  # mod.rs/lib.rs/main.rs: tests.rs + plain `mod tests;`
+ejectest apply --overwrite src/       # replace a test file that holds other content
 ejectest check src/                   # CI gate: fail if any inline test module remains
 ejectest apply --files-from hot.txt src/  # process only files listed in hot.txt
 ejectest check --files-from - src/    # read file list from stdin (e.g. piped from linecop)

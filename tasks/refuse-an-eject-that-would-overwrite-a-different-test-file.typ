@@ -2,7 +2,7 @@
 
 #show: task.with(
   title: "Refuse an eject that would overwrite a different test file",
-  status: wip(2026, 10, 7),
+  status: done(2026, 10, 7),
 )
 
 == Summary

@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use crate::{Classification, FileResult, OutputFormat, Report};
+use crate::{Classification, FileResult, OutputFormat, Report, TargetState};
 
 /// Render a `check` report.
 #[must_use]
@@ -51,10 +51,22 @@ fn render_apply_text(report: &Report, dry_run: bool) -> String {
 fn eject_lines(res: &FileResult, dry_run: bool) -> String {
     let test_path = test_path_for(res);
     let source = res.path.display();
-    if dry_run {
-        format!("Would create: {test_path}\nWould modify: {source}\n")
-    } else {
-        format!("Created: {test_path}\nModified: {source}\n")
+    match (res.target, dry_run) {
+        (Some(TargetState::Conflict), _) => format!("Would refuse: {test_path}\n"),
+        (Some(TargetState::Identical), true) => {
+            format!("Would keep: {test_path}\nWould modify: {source}\n")
+        }
+        (Some(TargetState::Identical), false) => {
+            format!("Kept: {test_path}\nModified: {source}\n")
+        }
+        (Some(TargetState::Overwrite), true) => {
+            format!("Would replace: {test_path}\nWould modify: {source}\n")
+        }
+        (Some(TargetState::Overwrite), false) => {
+            format!("Replaced: {test_path}\nModified: {source}\n")
+        }
+        (_, true) => format!("Would create: {test_path}\nWould modify: {source}\n"),
+        (_, false) => format!("Created: {test_path}\nModified: {source}\n"),
     }
 }
 
@@ -77,13 +89,7 @@ fn render_check_json(report: &Report) -> String {
     let files = report
         .results
         .iter()
-        .map(|res| {
-            format!(
-                "{{\"path\":\"{}\",\"status\":\"{}\"}}",
-                json_escape(&res.path.display().to_string()),
-                status_str(res.classification),
-            )
-        })
+        .map(check_file_json)
         .collect::<Vec<_>>()
         .join(",");
     let total = report.results.len();
@@ -93,6 +99,36 @@ fn render_check_json(report: &Report) -> String {
     format!(
         "{{\"files\":[{files}],\"summary\":{{\"total\":{total},\"inline\":{inline},\"external\":{external},\"no_tests\":{no_tests}}}}}\n"
     )
+}
+
+fn check_file_json(res: &FileResult) -> String {
+    let path = json_escape(&res.path.display().to_string());
+    let status = status_str(res.classification);
+    format!(
+        "{{\"path\":\"{path}\",\"status\":\"{status}\"{}}}",
+        test_fields_json(res)
+    )
+}
+
+/// The `test_file` and `target` members of an inline file's JSON entry.
+fn test_fields_json(res: &FileResult) -> String {
+    let mut out = String::new();
+    if let Some(name) = &res.test_file {
+        out.push_str(&format!(",\"test_file\":\"{}\"", json_escape(name)));
+    }
+    if let Some(state) = res.target {
+        out.push_str(&format!(",\"target\":\"{}\"", target_str(state)));
+    }
+    out
+}
+
+fn target_str(state: TargetState) -> &'static str {
+    match state {
+        TargetState::Missing => "missing",
+        TargetState::Identical => "identical",
+        TargetState::Conflict => "conflict",
+        TargetState::Overwrite => "overwrite",
+    }
 }
 
 fn render_apply_json(report: &Report) -> String {
@@ -108,6 +144,7 @@ fn render_apply_json(report: &Report) -> String {
         .results
         .iter()
         .filter(|res| !res.applied && res.classification == Classification::Inline)
+        .filter(|res| res.target != Some(TargetState::Conflict))
         .count();
     let external = count(report, Classification::External);
     let no_tests = count(report, Classification::NoTests);
@@ -119,17 +156,15 @@ fn render_apply_json(report: &Report) -> String {
 fn apply_file_json(res: &FileResult) -> String {
     let path = json_escape(&res.path.display().to_string());
     let action = apply_action(res);
-    match &res.test_file {
-        Some(name) => format!(
-            "{{\"path\":\"{path}\",\"action\":\"{action}\",\"test_file\":\"{}\"}}",
-            json_escape(name),
-        ),
-        None => format!("{{\"path\":\"{path}\",\"action\":\"{action}\"}}"),
-    }
+    format!(
+        "{{\"path\":\"{path}\",\"action\":\"{action}\"{}}}",
+        test_fields_json(res)
+    )
 }
 
 fn apply_action(res: &FileResult) -> &'static str {
     match res.classification {
+        Classification::Inline if res.target == Some(TargetState::Conflict) => "refused",
         Classification::Inline if res.applied => "ejected",
         Classification::Inline => "would_eject",
         Classification::External => "skipped_external",
@@ -153,7 +188,7 @@ fn count(report: &Report, target: Classification) -> usize {
         .count()
 }
 
-fn test_path_for(res: &FileResult) -> String {
+pub(super) fn test_path_for(res: &FileResult) -> String {
     match &res.test_file {
         Some(name) => {
             let parent = res.path.parent().unwrap_or_else(|| Path::new("."));
@@ -202,6 +237,7 @@ mod tests {
             classification: Classification::Inline,
             test_file: Some("foo_tests.rs".to_owned()),
             applied,
+            target: Some(TargetState::Missing),
         }
     }
 
@@ -211,6 +247,7 @@ mod tests {
             classification,
             test_file: None,
             applied: false,
+            target: None,
         }
     }
 

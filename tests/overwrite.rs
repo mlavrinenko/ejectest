@@ -15,7 +15,8 @@ fn cmd() -> Command {
 const SOURCE: &str = "pub fn add(aa: i32, bb: i32) -> i32 {\n    aa + bb\n}\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n\n    #[test]\n    fn test_add() {\n        assert_eq!(add(1, 2), 3);\n    }\n}\n";
 
 /// The test file `SOURCE` ejects to.
-const TESTS: &str = "use super::*;\n\n#[test]\nfn test_add() {\n    assert_eq!(add(1, 2), 3);\n}\n";
+const TESTS: &str =
+    "\nuse super::*;\n\n#[test]\nfn test_add() {\n    assert_eq!(add(1, 2), 3);\n}\n";
 
 /// One `(source name, test file name, extra args)` per target form.
 const CASES: [(&str, &str, &[&str]); 4] = [

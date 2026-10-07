@@ -45,17 +45,21 @@ fn apply_path_overwrite_replaces() {
     apply_path(&src_path, false, None, ModRsTests::Tests, true).expect("ok");
     assert_eq!(
         fs::read_to_string(dir.path().join("tests.rs")).expect("read"),
-        "#[test]\nfn it() {}\n"
+        "\n#[test]\nfn it() {}\n"
     );
 }
 
 #[test]
 fn apply_path_identical_is_a_warning_in_the_report() {
-    let (dir, src_path) = setup("foo.rs", "foo_tests.rs", Some("#[test]\nfn it() {}\n"));
+    let (dir, src_path) = setup("foo.rs", "foo_tests.rs", Some("\n#[test]\nfn it() {}\n"));
     let report = apply_path(&src_path, false, None, ModRsTests::Sibling, false).expect("ok");
     let warnings = report.warnings();
     assert_eq!(warnings.len(), 1);
-    assert!(warnings[0].ends_with("foo_tests.rs already holds these tests; left as is"));
+    assert!(
+        warnings
+            .first()
+            .is_some_and(|msg| msg.ends_with("foo_tests.rs already holds these tests; left as is"))
+    );
     assert!(
         !fs::read_to_string(&src_path)
             .expect("read")
