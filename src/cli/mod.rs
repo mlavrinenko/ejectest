@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
-use crate::{Classification, classify_source, eject_tests};
+use crate::{Classification, ModRsTests, classify_source, eject_tests};
 
 pub use filelist::{FileFilter, read_file_list};
 pub use render::{render_apply, render_check};
@@ -95,32 +95,42 @@ pub fn check_path(path: &Path, filter: Option<&FileFilter>) -> Result<Report> {
 /// Returns an error if the path cannot be walked, a file cannot be read or
 /// written, a file name is invalid, or — for a single-file input — no inline
 /// test module is present.
-pub fn apply_path(path: &Path, dry_run: bool, filter: Option<&FileFilter>) -> Result<Report> {
+pub fn apply_path(
+    path: &Path,
+    dry_run: bool,
+    filter: Option<&FileFilter>,
+    mod_rs_tests: ModRsTests,
+) -> Result<Report> {
     if path.is_dir() {
-        apply_dir(path, dry_run, filter)
+        apply_dir(path, dry_run, filter, mod_rs_tests)
     } else {
-        apply_file(path, dry_run)
+        apply_file(path, dry_run, mod_rs_tests)
     }
 }
 
 /// Eject every qualifying file under a directory, skipping the rest.
-fn apply_dir(path: &Path, dry_run: bool, filter: Option<&FileFilter>) -> Result<Report> {
+fn apply_dir(
+    path: &Path,
+    dry_run: bool,
+    filter: Option<&FileFilter>,
+    mod_rs_tests: ModRsTests,
+) -> Result<Report> {
     let files = walk::collect_rust_files(path)?;
     let mut results = Vec::with_capacity(files.len());
     for file in files {
         if filter.is_some_and(|ff| !ff.contains(&file)) {
             continue;
         }
-        results.push(eject_one(&file, dry_run)?);
+        results.push(eject_one(&file, dry_run, mod_rs_tests)?);
     }
     Ok(Report { results })
 }
 
 /// Eject a single file, erroring when it has no inline module.
-fn apply_file(path: &Path, dry_run: bool) -> Result<Report> {
+fn apply_file(path: &Path, dry_run: bool, mod_rs_tests: ModRsTests) -> Result<Report> {
     let source = std::fs::read_to_string(path)
         .with_context(|| format!("failed to read {}", path.display()))?;
-    let test_file = write_eject(path, &source, dry_run)?;
+    let test_file = write_eject(path, &source, dry_run, mod_rs_tests)?;
     Ok(Report {
         results: vec![FileResult {
             path: path.to_path_buf(),
@@ -133,14 +143,14 @@ fn apply_file(path: &Path, dry_run: bool) -> Result<Report> {
 
 /// Classify one file under directory mode, ejecting inline modules and
 /// skipping (not erroring on) external / no-test files.
-fn eject_one(path: &Path, dry_run: bool) -> Result<FileResult> {
+fn eject_one(path: &Path, dry_run: bool, mod_rs_tests: ModRsTests) -> Result<FileResult> {
     let source = std::fs::read_to_string(path)
         .with_context(|| format!("failed to read {}", path.display()))?;
     match classify_source(&source) {
         Classification::Inline => Ok(FileResult {
             path: path.to_path_buf(),
             classification: Classification::Inline,
-            test_file: Some(write_eject(path, &source, dry_run)?),
+            test_file: Some(write_eject(path, &source, dry_run, mod_rs_tests)?),
             applied: !dry_run,
         }),
         classification => Ok(FileResult {
@@ -155,15 +165,29 @@ fn eject_one(path: &Path, dry_run: bool) -> Result<FileResult> {
 /// Extract the inline test module from `source` and, unless `dry_run`, write
 /// the sibling `_tests.rs` file and the modified source. Returns the test
 /// file name.
-fn write_eject(path: &Path, source: &str, dry_run: bool) -> Result<String> {
+fn write_eject(
+    path: &Path,
+    source: &str,
+    dry_run: bool,
+    mod_rs_tests: ModRsTests,
+) -> Result<String> {
     let file_stem = path
         .file_stem()
         .and_then(|os| os.to_str())
         .context("invalid file name")?;
-    let result = eject_tests(source, file_stem)?;
+    let result = eject_tests(source, file_stem, mod_rs_tests)?;
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let test_path = parent.join(&result.test_file_name);
+    if mod_rs_tests == ModRsTests::Tests
+        && result.test_file_name == "tests.rs"
+        && test_path.exists()
+    {
+        anyhow::bail!(
+            "refusing to overwrite existing {}; move it away first",
+            test_path.display()
+        );
+    }
     if !dry_run {
-        let parent = path.parent().unwrap_or_else(|| Path::new("."));
-        let test_path = parent.join(&result.test_file_name);
         std::fs::write(&test_path, &result.test_content)
             .with_context(|| format!("failed to write {}", test_path.display()))?;
         std::fs::write(path, &result.modified_source)

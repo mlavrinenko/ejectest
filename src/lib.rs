@@ -37,6 +37,18 @@ pub enum EjectError {
     },
 }
 
+/// How a mod-rs file (`mod.rs`, `lib.rs`, `main.rs`) names its extracted tests.
+///
+/// Files that are not mod-rs files always use the `<stem>_tests.rs` sibling form.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ModRsTests {
+    /// `<stem>_tests.rs` wired with `#[path]` (e.g. `mod_tests.rs`).
+    #[default]
+    Sibling,
+    /// `tests.rs` wired with a plain `mod tests;` and no `#[path]`.
+    Tests,
+}
+
 /// The result of extracting an inline test module.
 pub struct EjectResult {
     /// The original source with the test module replaced by a `#[path]` reference.
@@ -51,7 +63,9 @@ pub struct EjectResult {
 /// into a separate file's content.
 ///
 /// `file_stem` is the base name without extension (e.g. `"foo"` for `foo.rs`),
-/// used to derive the test file name `foo_tests.rs`.
+/// used to derive the test file name `foo_tests.rs`. When `file_stem` is `mod`,
+/// `lib` or `main` and `mod_rs_tests` is [`ModRsTests::Tests`], the tests go to
+/// `tests.rs` behind a plain `mod tests;` instead.
 ///
 /// Only the first `#[cfg(test)] mod tests` block is extracted. Files with
 /// multiple test modules should be processed one at a time after renaming.
@@ -76,13 +90,17 @@ pub struct EjectResult {
 ///                   fn it_works() { assert_eq!(add(1, 2), 3); }\n\
 ///               }\n";
 ///
-/// let result = ejectest::eject_tests(source, "lib").unwrap();
+/// let result = ejectest::eject_tests(source, "lib", ejectest::ModRsTests::Sibling).unwrap();
 ///
 /// assert_eq!(result.test_file_name, "lib_tests.rs");
 /// assert!(result.modified_source.contains("#[path = \"lib_tests.rs\"]"));
 /// assert!(result.test_content.contains("fn it_works"));
 /// ```
-pub fn eject_tests(source: &str, file_stem: &str) -> Result<EjectResult, EjectError> {
+pub fn eject_tests(
+    source: &str,
+    file_stem: &str,
+    mod_rs_tests: ModRsTests,
+) -> Result<EjectResult, EjectError> {
     log::debug!("scanning {file_stem} ({} bytes)", source.len());
     let region = scanner::find_test_module_region(source)?;
     log::debug!(
@@ -109,8 +127,17 @@ pub fn eject_tests(source: &str, file_stem: &str) -> Result<EjectResult, EjectEr
         // Drop the leading blank line so the inner attribute heads the file.
         format!("{inner_attrs}{}", body.trim_start_matches('\n'))
     };
-    let test_file_name = format!("{file_stem}_tests.rs");
-    let replacement = format!("#[cfg(test)]\n#[path = \"{test_file_name}\"]\nmod tests;\n");
+    let (test_file_name, replacement) = if mod_rs_tests == ModRsTests::Tests && is_mod_rs(file_stem)
+    {
+        (
+            "tests.rs".to_owned(),
+            "#[cfg(test)]\nmod tests;\n".to_owned(),
+        )
+    } else {
+        let name = format!("{file_stem}_tests.rs");
+        let stub = format!("#[cfg(test)]\n#[path = \"{name}\"]\nmod tests;\n");
+        (name, stub)
+    };
 
     let prefix = source
         .get(..region.outer_start)
@@ -130,6 +157,11 @@ pub fn eject_tests(source: &str, file_stem: &str) -> Result<EjectResult, EjectEr
         test_content,
         test_file_name,
     })
+}
+
+/// Whether `file_stem` names a file whose own directory is its module (`mod.rs`, `lib.rs`, `main.rs`).
+fn is_mod_rs(file_stem: &str) -> bool {
+    matches!(file_stem, "mod" | "lib" | "main")
 }
 
 /// Translate outer attributes sitting between `#[cfg(test)]` and `mod tests`
@@ -221,7 +253,7 @@ mod tests {
             "}\n",
         );
 
-        let result = eject_tests(source, "math").expect("should succeed");
+        let result = eject_tests(source, "math", ModRsTests::Sibling).expect("should succeed");
 
         assert!(
             result
@@ -238,14 +270,14 @@ mod tests {
     #[test]
     fn no_test_module() {
         let source = "pub fn add(aa: i32, bb: i32) -> i32 { aa + bb }\n";
-        let result = eject_tests(source, "math");
+        let result = eject_tests(source, "math", ModRsTests::Sibling);
         assert!(matches!(result, Err(EjectError::NoTestModule)));
     }
 
     #[test]
     fn already_external() {
         let source = "#[cfg(test)]\n#[path = \"math_tests.rs\"]\nmod tests;\n";
-        let result = eject_tests(source, "math");
+        let result = eject_tests(source, "math", ModRsTests::Sibling);
         assert!(matches!(result, Err(EjectError::AlreadyExternal)));
     }
 
@@ -283,7 +315,7 @@ mod tests {
             "}\n",
         );
 
-        let result = eject_tests(source, "foo").expect("should succeed");
+        let result = eject_tests(source, "foo", ModRsTests::Sibling).expect("should succeed");
         assert!(result.modified_source.contains("pub struct Foo;"));
         assert!(result.modified_source.contains("impl Foo"));
         assert!(result.modified_source.contains("fn bar"));
@@ -307,7 +339,7 @@ mod tests {
             "}\n",
         );
 
-        let result = eject_tests(source, "lift").expect("should succeed");
+        let result = eject_tests(source, "lift", ModRsTests::Sibling).expect("should succeed");
 
         // Inner allow heads the extracted file, no leading blank line.
         assert!(
@@ -340,7 +372,7 @@ mod tests {
             "}\n",
         );
 
-        let result = eject_tests(source, "foo").expect("should succeed");
+        let result = eject_tests(source, "foo", ModRsTests::Sibling).expect("should succeed");
 
         assert!(
             result.test_content.starts_with(
@@ -360,7 +392,7 @@ mod tests {
             "}\n",
         );
 
-        let result = eject_tests(source, "foo").expect("should succeed");
+        let result = eject_tests(source, "foo", ModRsTests::Sibling).expect("should succeed");
         assert!(!result.test_content.contains("#!["));
     }
 
@@ -396,8 +428,49 @@ mod tests {
             "}\n",
         );
 
-        let result = eject_tests(source, "math").expect("should succeed");
+        let result = eject_tests(source, "math", ModRsTests::Sibling).expect("should succeed");
         assert!(result.modified_source.ends_with("mod tests;\n"));
         assert!(!result.modified_source.ends_with("\n\n"));
+    }
+
+    const MOD_RS_SOURCE: &str =
+        "pub fn foo() {}\n\n#[cfg(test)]\nmod tests {\n    #[test]\n    fn it() {}\n}\n";
+
+    #[test]
+    fn mod_rs_stems_use_plain_tests_rs() {
+        for stem in ["mod", "lib", "main"] {
+            let result = eject_tests(MOD_RS_SOURCE, stem, ModRsTests::Tests).expect("ok");
+            assert_eq!(result.test_file_name, "tests.rs");
+            assert!(result.modified_source.contains("#[cfg(test)]\nmod tests;"));
+            assert!(!result.modified_source.contains("#[path"));
+            assert!(result.test_content.contains("fn it()"));
+        }
+    }
+
+    #[test]
+    fn mod_rs_sibling_keeps_path_form() {
+        let result = eject_tests(MOD_RS_SOURCE, "mod", ModRsTests::Sibling).expect("ok");
+        assert_eq!(result.test_file_name, "mod_tests.rs");
+        assert!(
+            result
+                .modified_source
+                .contains("#[path = \"mod_tests.rs\"]")
+        );
+    }
+
+    #[test]
+    fn non_mod_rs_ignores_tests_choice() {
+        let result = eject_tests(MOD_RS_SOURCE, "eval", ModRsTests::Tests).expect("ok");
+        assert_eq!(result.test_file_name, "eval_tests.rs");
+        assert!(
+            result
+                .modified_source
+                .contains("#[path = \"eval_tests.rs\"]")
+        );
+    }
+
+    #[test]
+    fn default_choice_is_sibling() {
+        assert_eq!(ModRsTests::default(), ModRsTests::Sibling);
     }
 }

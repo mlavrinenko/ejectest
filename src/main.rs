@@ -3,7 +3,7 @@ use std::process::ExitCode;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
-use ejectest::{FileFilter, OutputFormat, read_file_list};
+use ejectest::{FileFilter, ModRsTests, OutputFormat, read_file_list};
 
 /// Extract inline `#[cfg(test)] mod tests { ... }` into separate `_tests.rs` files.
 #[derive(Parser)]
@@ -31,6 +31,9 @@ enum Command {
         /// Allow missing files and paths outside root in the file list.
         #[arg(long)]
         lenient: bool,
+        /// How a mod-rs file (`mod.rs`, `lib.rs`, `main.rs`) names its extracted tests.
+        #[arg(long, value_enum, default_value_t = ModRsStyle::Sibling)]
+        mod_rs_tests: ModRsStyle,
     },
     /// Detect inline test modules without modifying (file or directory).
     Check {
@@ -87,9 +90,11 @@ fn main() -> Result<ExitCode> {
             format,
             files_from,
             lenient,
+            mod_rs_tests,
         } => {
             let filter = build_filter(files_from.as_deref(), &path, lenient)?;
-            let report = ejectest::apply_path(&path, dry_run, filter.as_ref())?;
+            let report =
+                ejectest::apply_path(&path, dry_run, filter.as_ref(), mod_rs_tests.into())?;
             print!(
                 "{}",
                 ejectest::render_apply(&report, format.into(), dry_run)
@@ -110,6 +115,24 @@ fn main() -> Result<ExitCode> {
             } else {
                 Ok(ExitCode::SUCCESS)
             }
+        }
+    }
+}
+
+/// CLI spelling of [`ModRsTests`].
+#[derive(Clone, Copy, ValueEnum)]
+enum ModRsStyle {
+    /// `<stem>_tests.rs` with `#[path]` (default).
+    Sibling,
+    /// Plain `tests.rs` with `mod tests;`.
+    Tests,
+}
+
+impl From<ModRsStyle> for ModRsTests {
+    fn from(style: ModRsStyle) -> Self {
+        match style {
+            ModRsStyle::Sibling => Self::Sibling,
+            ModRsStyle::Tests => Self::Tests,
         }
     }
 }
