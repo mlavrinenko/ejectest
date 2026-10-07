@@ -2,7 +2,7 @@
 
 #show: task.with(
   title: "Push main before the tag in just release",
-  status: proposed(2026, 10, 7),
+  status: done(2026, 10, 7),
 )
 
 == Summary
