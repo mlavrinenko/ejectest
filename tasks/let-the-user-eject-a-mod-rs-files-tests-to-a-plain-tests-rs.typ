@@ -2,7 +2,7 @@
 
 #show: task.with(
   title: "Let the user eject a mod-rs file's tests to a plain tests.rs",
-  status: wip(2026, 10, 7),
+  status: done(2026, 10, 7),
 )
 
 == Summary

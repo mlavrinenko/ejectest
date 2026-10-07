@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-07
+
+### Added
+
+- `apply --mod-rs-tests <sibling|tests>`: `tests` ejects a `mod.rs`, `lib.rs` or `main.rs` file's tests to a plain `tests.rs` behind `mod tests;` with no `#[path]`, matching `clippy::self_named_module_files`. The default `sibling` keeps `<stem>_tests.rs` with `#[path]`; other files are unaffected. `apply` refuses, without writing, when `tests.rs` already exists. Text and JSON reports name the file actually written
+- `ModRsTests` in the library API
+
+### Changed
+
+- BREAKING: `eject_tests` and `apply_path` take a `ModRsTests` argument; pass `ModRsTests::Sibling` for the previous behaviour
+
 ## [0.3.0] - 2026-06-03
 
 ### Added

@@ -23,6 +23,7 @@ That's busywork. **ejectest** does it in one command.
 ejectest apply src/lib.rs             # extract tests into src/lib_tests.rs
 ejectest apply src/                   # eject every inline module under a tree
 ejectest apply --dry-run src/         # preview without writing files
+ejectest apply --mod-rs-tests tests src/  # mod.rs/lib.rs/main.rs: tests.rs + plain `mod tests;`
 ejectest check src/                   # CI gate: fail if any inline test module remains
 ejectest apply --files-from hot.txt src/  # process only files listed in hot.txt
 ejectest check --files-from - src/    # read file list from stdin (e.g. piped from linecop)
@@ -54,6 +55,13 @@ ejectest apply --format json src/     # actions: ejected|would_eject|skipped_ext
 Both commands also accept `--files-from <PATH>` to restrict processing to
 paths listed in a newline-separated file (`-` for stdin), and `--lenient`
 to silently skip missing or out-of-root entries in that file list.
+
+By default a mod-rs file (`mod.rs`, `lib.rs`, `main.rs`) ejects to
+`<stem>_tests.rs` with `#[path]`, e.g. `filter/mod_tests.rs`. Pass
+`apply --mod-rs-tests tests` to get `filter/tests.rs` and a plain
+`mod tests;` instead, which suits `clippy::self_named_module_files`. Other
+files keep `<stem>_tests.rs` under either value, and `apply` refuses to run
+on a mod-rs file when `tests.rs` already exists. `check` accepts both forms.
 
 ## Install
 
@@ -100,14 +108,14 @@ nix run github:mlavrinenko/ejectest -- apply src/lib.rs
 Add to your `Cargo.toml` with default features disabled:
 
 ```toml
-ejectest = { version = "0.3", default-features = false }
+ejectest = { version = "0.4", default-features = false }
 ```
 
 ```rust
-let result = ejectest::eject_tests(source, "lib")?;
+let result = ejectest::eject_tests(source, "lib", ejectest::ModRsTests::Sibling)?;
 // result.modified_source  — source with tests replaced by a #[path] stub
 // result.test_content     — extracted test file contents
-// result.test_file_name   — e.g. "lib_tests.rs"
+// result.test_file_name   — e.g. "lib_tests.rs" ("tests.rs" for ModRsTests::Tests on mod/lib/main)
 
 // Read-only detection (powers `ejectest check`):
 match ejectest::classify_source(source) {
